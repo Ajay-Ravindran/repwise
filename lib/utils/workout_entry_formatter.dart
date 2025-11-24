@@ -1,13 +1,17 @@
 import '../models/exercise.dart';
 import '../models/workout.dart';
 
-String formatWorkoutEntry(WorkoutSetEntry entry) {
+String formatWorkoutEntry(
+  WorkoutSetEntry entry, {
+  String weightUnit = 'kg',
+  String distanceUnit = 'km',
+}) {
   final List<String> parts = <String>[];
 
   switch (entry.unit) {
     case ExerciseUnit.weightReps:
       parts
-        ..add(_formatDouble(entry.weight, suffix: 'kg'))
+        ..add(_formatDouble(entry.weight, suffix: weightUnit))
         ..add(_formatReps(entry.reps));
       break;
     case ExerciseUnit.reps:
@@ -19,7 +23,7 @@ String formatWorkoutEntry(WorkoutSetEntry entry) {
     case ExerciseUnit.distanceTime:
       parts.addAll(
         _formatCombined(
-          _formatDouble(entry.distance, suffix: 'km'),
+          _formatDouble(entry.distance, suffix: distanceUnit),
           _formatDuration(entry.duration),
           joiner: ' in ',
         ),
@@ -35,7 +39,7 @@ String formatWorkoutEntry(WorkoutSetEntry entry) {
       );
       break;
     case ExerciseUnit.distance:
-      parts.add(_formatDouble(entry.distance, suffix: 'km'));
+      parts.add(_formatDouble(entry.distance, suffix: distanceUnit));
       break;
   }
 

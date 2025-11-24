@@ -120,6 +120,10 @@ class LibraryScreen extends StatelessWidget {
                   )
                 : ListView.separated(
                     itemBuilder: (context, index) {
+                      if (index == groups.length) {
+                        // Settings section at the end
+                        return const _SettingsSection();
+                      }
                       final group = groups[index];
                       return Card(
                         clipBehavior: Clip.antiAlias,
@@ -194,10 +198,102 @@ class LibraryScreen extends StatelessWidget {
                     },
                     separatorBuilder: (context, _) =>
                         const SizedBox(height: 12),
-                    itemCount: groups.length,
+                    itemCount: groups.length + 1, // +1 for settings section
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<GymLogProvider>();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Settings', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Weight Unit',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'kg', label: Text('kg')),
+                    ButtonSegment(value: 'lb', label: Text('lb')),
+                  ],
+                  selected: {provider.weightUnit},
+                  onSelectionChanged: (Set<String> selected) {
+                    provider.setWeightUnit(selected.first);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Distance Unit',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'km', label: Text('km')),
+                    ButtonSegment(value: 'mi', label: Text('mi')),
+                  ],
+                  selected: {provider.distanceUnit},
+                  onSelectionChanged: (Set<String> selected) {
+                    provider.setDistanceUnit(selected.first);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Half Reps',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                Switch(
+                  value: provider.halfRepsEnabled,
+                  onChanged: provider.setHalfRepsEnabled,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Comments',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                Switch(
+                  value: provider.commentsEnabled,
+                  onChanged: provider.setCommentsEnabled,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

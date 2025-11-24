@@ -804,7 +804,11 @@ class _WorkoutSetTile extends StatelessWidget {
             unit: ExerciseUnit.reps,
           );
       final hasComment = (entry.comment?.trim().isNotEmpty ?? false);
-      final metrics = formatWorkoutEntry(entry);
+      final metrics = formatWorkoutEntry(
+        entry,
+        weightUnit: provider.weightUnit,
+        distanceUnit: provider.distanceUnit,
+      );
 
       // For superset, show exercise name with metrics in aligned columns
       if (set.entries.length > 1) {

@@ -17,23 +17,44 @@ import '../widgets/scrollable_metrics_text.dart';
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
 
+  /// Formats a number to string without unnecessary decimal points.
+  /// For example: 10.0 -> "10", 10.5 -> "10.5"
+  static String _formatNumberToString(num value) {
+    if (value == value.toInt()) {
+      return value.toInt().toString();
+    }
+    return value.toString();
+  }
+
   static Future<void> showStartExerciseSheet(BuildContext context) async {
     final rootContext = context;
     final provider = rootContext.read<GymLogProvider>();
     final session = provider.activeSession;
     if (session == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(
-          content: Text('Start a workout before selecting exercises.'),
+        SnackBar(
+          content: const Text('Start a workout before selecting exercises'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
+          ),
         ),
       );
       return;
     }
     if (provider.activeExercise != null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Finish or cancel the current exercise before starting another.',
+        SnackBar(
+          content: const Text(
+            'Finish or cancel the current exercise before starting another',
+          ),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
           ),
         ),
       );
@@ -44,8 +65,14 @@ class WorkoutScreen extends StatefulWidget {
         .toList();
     if (groups.isEmpty) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(
-          content: Text('Add exercises in the library before starting.'),
+        SnackBar(
+          content: const Text('Add exercises in the library before starting'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
+          ),
         ),
       );
       return;
@@ -174,8 +201,20 @@ class WorkoutScreen extends StatefulWidget {
                               );
                               if (log == null) {
                                 ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Unable to start exercise.'),
+                                  SnackBar(
+                                    content: const Text(
+                                      'Unable to start exercise',
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    margin: EdgeInsets.only(
+                                      bottom:
+                                          MediaQuery.of(
+                                            sheetContext,
+                                          ).size.height -
+                                          120,
+                                      left: 16,
+                                      right: 16,
+                                    ),
                                   ),
                                 );
                                 return;
@@ -185,8 +224,16 @@ class WorkoutScreen extends StatefulWidget {
                                 SnackBar(
                                   content: Text(
                                     log.isSuperset
-                                        ? 'Superset started.'
-                                        : 'Exercise started.',
+                                        ? 'Superset started'
+                                        : 'Exercise started',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: EdgeInsets.only(
+                                    bottom:
+                                        MediaQuery.of(rootContext).size.height -
+                                        120,
+                                    left: 16,
+                                    right: 16,
                                   ),
                                 ),
                               );
@@ -214,7 +261,15 @@ class WorkoutScreen extends StatefulWidget {
     final session = provider.activeSession;
     if (session == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(content: Text('Start a workout before logging sets.')),
+        SnackBar(
+          content: const Text('Start a workout before logging sets'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
+          ),
+        ),
       );
       return;
     }
@@ -228,7 +283,15 @@ class WorkoutScreen extends StatefulWidget {
     }
     if (currentExercise == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(content: Text('This exercise is no longer active.')),
+        SnackBar(
+          content: const Text('This exercise is no longer active'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
+          ),
+        ),
       );
       return;
     }
@@ -236,8 +299,14 @@ class WorkoutScreen extends StatefulWidget {
     final group = provider.muscleGroupById(currentExercise.muscleGroupId);
     if (group == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(
-          content: Text('Muscle group for this exercise is missing.'),
+        SnackBar(
+          content: const Text('Muscle group for this exercise is missing'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
+          ),
         ),
       );
       return;
@@ -255,7 +324,15 @@ class WorkoutScreen extends StatefulWidget {
       }
       if (existingSet == null) {
         ScaffoldMessenger.of(rootContext).showSnackBar(
-          const SnackBar(content: Text('Set is no longer available.')),
+          SnackBar(
+            content: const Text('Set is no longer available'),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              bottom: MediaQuery.of(rootContext).size.height - 250,
+              left: 16,
+              right: 16,
+            ),
+          ),
         );
         return;
       }
@@ -264,9 +341,15 @@ class WorkoutScreen extends StatefulWidget {
     final List<Exercise> exercises = group.exercises;
     if (exercises.isEmpty) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Add exercises for this muscle group before logging sets.',
+        SnackBar(
+          content: const Text(
+            'Add exercises for this muscle group before logging sets',
+          ),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(rootContext).size.height - 250,
+            left: 16,
+            right: 16,
           ),
         ),
       );
@@ -308,10 +391,10 @@ class WorkoutScreen extends StatefulWidget {
           draft.reps = entry.reps!.toString();
         }
         if (entry.weight != null) {
-          draft.weight = entry.weight!.toString();
+          draft.weight = _formatNumberToString(entry.weight!);
         }
         if (entry.distance != null) {
-          draft.distance = entry.distance!.toString();
+          draft.distance = _formatNumberToString(entry.distance!);
         }
         if (entry.duration != null) {
           draft.time = entry.duration!.inSeconds.toString();
@@ -384,6 +467,11 @@ class WorkoutScreen extends StatefulWidget {
                       decoration: InputDecoration(
                         labelText: label,
                         border: const OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
                       onChanged: (value) {
                         setState(() {
@@ -408,6 +496,11 @@ class WorkoutScreen extends StatefulWidget {
                         labelText: 'Comment (optional)',
                         alignLabelWithHint: true,
                         border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
                       onChanged: (value) {
                         setState(() {
@@ -433,6 +526,11 @@ class WorkoutScreen extends StatefulWidget {
                         decoration: const InputDecoration(
                           labelText: 'Half reps',
                           border: OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
                         ),
                         onChanged: (value) {
                           setState(() {
@@ -445,7 +543,7 @@ class WorkoutScreen extends StatefulWidget {
                   );
                 }
 
-                Widget buildRepsRow({required bool allowHalfReps}) {
+                Widget buildRepsRow() {
                   final repsField = buildField(
                     label: 'Reps',
                     fieldKey: 'reps',
@@ -455,7 +553,8 @@ class WorkoutScreen extends StatefulWidget {
                     ),
                     onChanged: (value) => draft.reps = value,
                   );
-                  if (!allowHalfReps) {
+                  // Show half reps field if enabled in settings
+                  if (!provider.halfRepsEnabled) {
                     return repsField;
                   }
                   return Row(
@@ -475,16 +574,16 @@ class WorkoutScreen extends StatefulWidget {
                     fields
                       ..add(
                         buildField(
-                          label: 'Weight (kg)',
+                          label: 'Weight (${provider.weightUnit})',
                           fieldKey: 'weight',
                           initialValue: draft.weight,
                           onChanged: (value) => draft.weight = value,
                         ),
                       )
-                      ..add(buildRepsRow(allowHalfReps: true));
+                      ..add(buildRepsRow());
                     break;
                   case ExerciseUnit.reps:
-                    fields.add(buildRepsRow(allowHalfReps: true));
+                    fields.add(buildRepsRow());
                     break;
                   case ExerciseUnit.time:
                     fields.add(
@@ -503,7 +602,7 @@ class WorkoutScreen extends StatefulWidget {
                     fields
                       ..add(
                         buildField(
-                          label: 'Distance (km)',
+                          label: 'Distance (${provider.distanceUnit})',
                           fieldKey: 'distance',
                           initialValue: draft.distance,
                           onChanged: (value) => draft.distance = value,
@@ -523,7 +622,7 @@ class WorkoutScreen extends StatefulWidget {
                     break;
                   case ExerciseUnit.repsTime:
                     fields
-                      ..add(buildRepsRow(allowHalfReps: true))
+                      ..add(buildRepsRow())
                       ..add(
                         buildField(
                           label: 'Time (seconds)',
@@ -539,7 +638,7 @@ class WorkoutScreen extends StatefulWidget {
                   case ExerciseUnit.distance:
                     fields.add(
                       buildField(
-                        label: 'Distance (km)',
+                        label: 'Distance (${provider.distanceUnit})',
                         fieldKey: 'distance',
                         initialValue: draft.distance,
                         onChanged: (value) => draft.distance = value,
@@ -548,7 +647,10 @@ class WorkoutScreen extends StatefulWidget {
                     break;
                 }
 
-                fields.add(buildCommentField());
+                // Add comment field if enabled in settings
+                if (provider.commentsEnabled) {
+                  fields.add(buildCommentField());
+                }
                 return fields;
               }
 
@@ -624,9 +726,16 @@ class WorkoutScreen extends StatefulWidget {
                                     ),
                                 ],
                               ),
+                              const SizedBox(height: 8),
                               InputDecorator(
                                 decoration: const InputDecoration(
                                   labelText: 'Exercise',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ),
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<String>(
@@ -921,7 +1030,14 @@ class WorkoutScreen extends StatefulWidget {
                         ScaffoldMessenger.of(rootContext).showSnackBar(
                           SnackBar(
                             content: Text(
-                              isEditing ? 'Set updated.' : 'Set added.',
+                              isEditing ? 'Set updated' : 'Set added',
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            margin: EdgeInsets.only(
+                              bottom:
+                                  MediaQuery.of(rootContext).size.height - 250,
+                              left: 16,
+                              right: 16,
                             ),
                           ),
                         );
@@ -958,6 +1074,7 @@ class _DraftSetEntry {
 
 class _WorkoutScreenState extends State<WorkoutScreen> {
   late final AudioPlayer _audioPlayer;
+  late final ScrollController _scrollController;
   Uint8List? _toneBytes;
   int _lastCompletionSignalId = 0;
 
@@ -965,12 +1082,28 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _scrollController = ScrollController();
+    // Scroll to bottom after the first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
   }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     unawaited(_audioPlayer.dispose());
     super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients && mounted) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _maybeHandleTimerCompletion(GymLogProvider provider) {
@@ -1205,16 +1338,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             Text('Workout Timer', style: theme.textTheme.titleMedium),
             if (isComplete) ...[
               const SizedBox(width: 8),
-              const Chip(label: Text('Complete')),
+              const Chip(
+                label: Text('Complete'),
+                visualDensity: VisualDensity.compact,
+              ),
             ],
             const Spacer(),
-            IconButton(
-              tooltip: 'Set new timer',
-              onPressed: () {
-                unawaited(onOpenSetup());
-              },
-              icon: const Icon(Icons.timer_outlined),
-            ),
             IconButton(
               tooltip: 'Close',
               onPressed: onClose,
@@ -1282,6 +1411,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       for (final group in provider.muscleGroups) group.id: group,
     };
 
+    // Scroll to bottom when exercises list changes
+    if (session != null && session.exercises.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1297,9 +1433,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
             )
           else if (session == null)
-            const Expanded(
-              child: _EmptyState(
-                message: 'Tap Start to begin logging your workout.',
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Ready to start your workout?',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: () => _handleStartWorkout(context, provider),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Start Workout'),
+                    ),
+                  ],
+                ),
               ),
             )
           else
@@ -1328,30 +1479,21 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           child: Text('Workout', style: Theme.of(context).textTheme.titleLarge),
         ),
         const SizedBox(width: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (provider.isTimerActive)
-              _TimerBadge(
-                label: _formatClock(provider.timerRemaining ?? Duration.zero),
-              ),
-            IconButton(
-              tooltip: provider.isTimerActive ? 'View timer' : 'Start timer',
-              onPressed: () => _showTimerPopup(context),
-              icon: Icon(
-                provider.isTimerActive ? Icons.timer : Icons.timer_outlined,
-              ),
+        if (provider.isTimerActive)
+          InkWell(
+            onTap: () => _showTimerPopup(context),
+            borderRadius: BorderRadius.circular(14),
+            child: _TimerBadge(
+              label: _formatClock(provider.timerRemaining ?? Duration.zero),
             ),
-            if (session == null)
-              FilledButton(
-                onPressed: provider.muscleGroups.isEmpty
-                    ? null
-                    : () => _handleStartWorkout(context, provider),
-                child: const Text('Start Workout'),
-              ),
-          ],
+          ),
+        if (provider.isTimerActive) const SizedBox(width: 8),
+        IconButton(
+          tooltip: provider.isTimerActive ? 'View timer' : 'Start timer',
+          onPressed: () => _showTimerPopup(context),
+          icon: Icon(
+            provider.isTimerActive ? Icons.timer : Icons.timer_outlined,
+          ),
         ),
       ],
     );
@@ -1424,6 +1566,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           child: exercises.isEmpty
               ? const _EmptyState(message: 'Add an exercise to log sets.')
               : ListView.separated(
+                  controller: _scrollController,
                   itemCount: exercises.length,
                   separatorBuilder: (_, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
@@ -1568,7 +1711,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         );
         if (!moved && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to reorder sets.')),
+            SnackBar(
+              content: const Text('Unable to reorder sets'),
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.only(
+                bottom: MediaQuery.of(context).size.height - 250,
+                left: 16,
+                right: 16,
+              ),
+            ),
           );
         }
       },
@@ -1682,9 +1833,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Workout started.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Workout started'),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 250,
+          left: 16,
+          right: 16,
+        ),
+      ),
+    );
   }
 
   void _handleFinishWorkout(BuildContext context, GymLogProvider provider) {
@@ -1692,9 +1851,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Workout saved.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Workout saved'),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 250,
+          left: 16,
+          right: 16,
+        ),
+      ),
+    );
   }
 
   void _handleFinishExercise(
@@ -1705,7 +1872,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final success = provider.completeExercise(log.id);
     _showSnackBar(
       context,
-      success ? 'Exercise finished.' : 'Unable to finish this exercise.',
+      success ? 'Exercise finished' : 'Unable to finish this exercise',
     );
   }
 
@@ -1717,7 +1884,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final success = provider.cancelExercise(log.id);
     _showSnackBar(
       context,
-      success ? 'Exercise cancelled.' : 'Unable to cancel this exercise.',
+      success ? 'Exercise cancelled' : 'Unable to cancel this exercise',
     );
   }
 
@@ -1729,7 +1896,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final success = provider.reopenExercise(log.id);
     _showSnackBar(
       context,
-      success ? 'Exercise reopened.' : 'Unable to reopen this exercise.',
+      success ? 'Exercise reopened' : 'Unable to reopen this exercise',
     );
   }
 
@@ -1745,7 +1912,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
     _showSnackBar(
       context,
-      success ? 'Set removed.' : 'Unable to remove this set.',
+      success ? 'Set removed' : 'Unable to remove this set',
     );
   }
 
@@ -1755,9 +1922,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 250,
+          left: 16,
+          right: 16,
+        ),
+      ),
+    );
   }
 
   @override
@@ -1996,7 +2171,12 @@ class _SetRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = formatWorkoutEntry(entry);
+    final provider = context.watch<GymLogProvider>();
+    final metrics = formatWorkoutEntry(
+      entry,
+      weightUnit: provider.weightUnit,
+      distanceUnit: provider.distanceUnit,
+    );
     final hasComment = (entry.comment?.trim().isNotEmpty ?? false);
 
     void showCommentDialog() {

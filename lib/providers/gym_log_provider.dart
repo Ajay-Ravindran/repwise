@@ -29,6 +29,12 @@ class GymLogProvider extends ChangeNotifier {
   int _timerCompletionSignalId = 0;
   bool _initialized = false;
 
+  // App Settings
+  String _weightUnit = 'kg'; // 'kg' or 'lb'
+  String _distanceUnit = 'km'; // 'km' or 'mi'
+  bool _halfRepsEnabled = false;
+  bool _commentsEnabled = true;
+
   List<MuscleGroup> get muscleGroups =>
       List<MuscleGroup>.unmodifiable(_muscleGroups);
   WorkoutSession? get activeSession => _activeSession;
@@ -67,6 +73,12 @@ class GymLogProvider extends ChangeNotifier {
       !_timerRunning &&
       (_timerRemaining ?? Duration.zero).inSeconds == 0;
   bool get isInitialized => _initialized;
+
+  // Settings getters
+  String get weightUnit => _weightUnit;
+  String get distanceUnit => _distanceUnit;
+  bool get halfRepsEnabled => _halfRepsEnabled;
+  bool get commentsEnabled => _commentsEnabled;
 
   Map<DateTime, List<WorkoutSession>> get completedSessionsByDate {
     final Map<DateTime, List<WorkoutSession>> grouped =
@@ -154,6 +166,10 @@ class GymLogProvider extends ChangeNotifier {
       _timerSoundEnabled = settings['timerSoundEnabled'] as bool? ?? true;
       _timerVibrationEnabled =
           settings['timerVibrationEnabled'] as bool? ?? true;
+      _weightUnit = settings['weightUnit'] as String? ?? 'kg';
+      _distanceUnit = settings['distanceUnit'] as String? ?? 'km';
+      _halfRepsEnabled = settings['halfRepsEnabled'] as bool? ?? false;
+      _commentsEnabled = settings['commentsEnabled'] as bool? ?? true;
     }
   }
 
@@ -197,6 +213,10 @@ class GymLogProvider extends ChangeNotifier {
       'settings': <String, dynamic>{
         'timerSoundEnabled': _timerSoundEnabled,
         'timerVibrationEnabled': _timerVibrationEnabled,
+        'weightUnit': _weightUnit,
+        'distanceUnit': _distanceUnit,
+        'halfRepsEnabled': _halfRepsEnabled,
+        'commentsEnabled': _commentsEnabled,
       },
     };
   }
@@ -404,6 +424,36 @@ class GymLogProvider extends ChangeNotifier {
       notifyListeners();
       unawaited(_persist());
     }
+  }
+
+  void setWeightUnit(String unit) {
+    if (unit != 'kg' && unit != 'lb') return;
+    if (_weightUnit == unit) return;
+    _weightUnit = unit;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  void setDistanceUnit(String unit) {
+    if (unit != 'km' && unit != 'mi') return;
+    if (_distanceUnit == unit) return;
+    _distanceUnit = unit;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  void setHalfRepsEnabled(bool enabled) {
+    if (_halfRepsEnabled == enabled) return;
+    _halfRepsEnabled = enabled;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  void setCommentsEnabled(bool enabled) {
+    if (_commentsEnabled == enabled) return;
+    _commentsEnabled = enabled;
+    notifyListeners();
+    unawaited(_persist());
   }
 
   void _handleTimerTick(Timer timer) {
