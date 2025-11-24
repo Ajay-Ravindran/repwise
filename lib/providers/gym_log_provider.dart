@@ -768,10 +768,7 @@ class GymLogProvider extends ChangeNotifier {
       DateTime(dateTime.year, dateTime.month, dateTime.day);
 
   /// Check if a set entry is a personal record.
-  /// Only checks for single-exercise sets (not supersets).
-  /// For multi-unit exercises, returns true if ANY unit is a PR.
-  /// Ignores half reps in PR calculations.
-  /// Only marks the first set with the highest value as a PR.
+  /// Uses getCurrentPRs to ensure consistent logic between workout and history screens.
   bool isPersonalRecord(
     WorkoutSetEntry entry,
     WorkoutSet currentSet, {
@@ -782,345 +779,23 @@ class GymLogProvider extends ChangeNotifier {
       return false;
     }
 
-    final exercise = exerciseById(entry.exerciseId);
-    if (exercise == null) {
-      return false;
-    }
-
-    // Gather all entries for this exercise (including current session)
-    final allEntries = <({WorkoutSet set, WorkoutSetEntry entry})>[];
-
-    // Check completed sessions
-    for (final session in _completedSessions) {
-      if (excludeSession != null && session.id == excludeSession.id) {
-        continue;
-      }
-      for (final exerciseLog in session.exercises) {
-        for (final set in exerciseLog.sets) {
-          // Only compare single-exercise sets
-          if (set.entries.length == 1) {
-            for (final prevEntry in set.entries) {
-              if (prevEntry.exerciseId == entry.exerciseId) {
-                allEntries.add((set: set, entry: prevEntry));
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Check active session if not excluded
-    if (_activeSession != null &&
-        (excludeSession == null || _activeSession!.id != excludeSession.id)) {
-      for (final exerciseLog in _activeSession!.exercises) {
-        for (final set in exerciseLog.sets) {
-          // Only compare single-exercise sets, and exclude the current set
-          if (set.entries.length == 1 && set.id != currentSet.id) {
-            for (final prevEntry in set.entries) {
-              if (prevEntry.exerciseId == entry.exerciseId) {
-                allEntries.add((set: set, entry: prevEntry));
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // If no other entries, this is the first time doing this exercise
-    if (allEntries.isEmpty) {
-      return true; // First time is always a PR
-    }
-
-    // Check based on exercise unit type
-    switch (exercise.unit) {
-      case ExerciseUnit.weightReps:
-        // PR if either weight OR reps is strictly higher (ignoring half reps)
-        final currentWeight = entry.weight ?? 0;
-        final currentReps = entry.reps ?? 0;
-
-        var maxWeight = 0.0;
-        var maxReps = 0;
-
-        for (final record in allEntries) {
-          final prevWeight = record.entry.weight ?? 0;
-          final prevReps = record.entry.reps ?? 0;
-          if (prevWeight > maxWeight) maxWeight = prevWeight;
-          if (prevReps > maxReps) maxReps = prevReps;
-        }
-
-        // Check if current set has higher weight or reps than all previous
-        final hasWeightPR = currentWeight > maxWeight;
-        final hasRepsPR = currentReps > maxReps;
-        final tiedWeight = currentWeight == maxWeight;
-        final tiedReps = currentReps == maxReps;
-
-        if (!hasWeightPR && !hasRepsPR && !tiedWeight && !tiedReps) {
-          return false;
-        }
-
-        // Special handling for weight PRs (including ties)
-        if (hasWeightPR || tiedWeight) {
-          // Find if there's an earlier set in active session with same weight
-          int? earlierSetReps;
-          for (final record in allEntries) {
-            if (_activeSession != null &&
-                _isSetInSession(record.set, _activeSession!)) {
-              // Check if this set is earlier than current set (by timestamp)
-              if (record.set.timestamp.isBefore(currentSet.timestamp)) {
-                final prevWeight = record.entry.weight ?? 0;
-                if (prevWeight == currentWeight) {
-                  earlierSetReps = record.entry.reps ?? 0;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (earlierSetReps != null) {
-            // Another set in active session has same weight
-            // Only this set is PR if it has more reps
-            if (currentReps <= earlierSetReps) {
-              return false;
-            }
-          } else if (tiedWeight && !hasWeightPR) {
-            // Weight ties with completed session but is not a new high
-            // If reps also tie or are lower, and no earlier set in active session, this is the first with this combo
-            // If reps are higher, it's a reps PR
-            if (!hasRepsPR && !tiedReps) {
-              return false;
-            }
-          }
-        }
-
-        // Special handling for reps PRs (including ties)
-        if (hasRepsPR || (tiedReps && !hasWeightPR && !tiedWeight)) {
-          // Find if there's an earlier set in active session with same reps
-          for (final record in allEntries) {
-            if (_activeSession != null &&
-                _isSetInSession(record.set, _activeSession!)) {
-              // Check if this set is earlier than current set (by timestamp)
-              if (record.set.timestamp.isBefore(currentSet.timestamp)) {
-                final prevReps = record.entry.reps ?? 0;
-                final prevWeight = record.entry.weight ?? 0;
-                if (prevReps == currentReps && prevWeight >= currentWeight) {
-                  return false; // Earlier set has same or better metrics
-                }
-              }
-            }
-          }
-        }
-
-        return true;
-
-      case ExerciseUnit.reps:
-        // PR if reps is strictly higher (ignoring half reps)
-        final currentReps = entry.reps ?? 0;
-        var maxReps = 0;
-
-        for (final record in allEntries) {
-          final prevReps = record.entry.reps ?? 0;
-          if (prevReps > maxReps) maxReps = prevReps;
-        }
-
-        if (currentReps <= maxReps) {
-          return false;
-        }
-
-        // Check if any earlier set in active session has same reps
-        for (final record in allEntries) {
-          if (record.set.id == currentSet.id) break;
-          if (_activeSession != null &&
-              _isSetInSession(record.set, _activeSession!)) {
-            final prevReps = record.entry.reps ?? 0;
-            if (prevReps == currentReps) {
-              return false;
-            }
-          }
-        }
-
-        return true;
-
-      case ExerciseUnit.time:
-        // PR if time is strictly higher
-        final currentSeconds = entry.duration?.inSeconds ?? 0;
-        var maxSeconds = 0;
-
-        for (final record in allEntries) {
-          final prevSeconds = record.entry.duration?.inSeconds ?? 0;
-          if (prevSeconds > maxSeconds) maxSeconds = prevSeconds;
-        }
-
-        if (currentSeconds <= maxSeconds) {
-          return false;
-        }
-
-        // Check if any earlier set in active session has same time
-        for (final record in allEntries) {
-          if (record.set.id == currentSet.id) break;
-          if (_activeSession != null &&
-              _isSetInSession(record.set, _activeSession!)) {
-            final prevSeconds = record.entry.duration?.inSeconds ?? 0;
-            if (prevSeconds == currentSeconds) {
-              return false;
-            }
-          }
-        }
-
-        return true;
-
-      case ExerciseUnit.distanceTime:
-        // PR if either distance OR time is strictly higher
-        final currentDistance = entry.distance ?? 0;
-        final currentSeconds = entry.duration?.inSeconds ?? 0;
-
-        var maxDistance = 0.0;
-        var maxSeconds = 0;
-
-        for (final record in allEntries) {
-          final prevDistance = record.entry.distance ?? 0;
-          final prevSeconds = record.entry.duration?.inSeconds ?? 0;
-          if (prevDistance > maxDistance) maxDistance = prevDistance;
-          if (prevSeconds > maxSeconds) maxSeconds = prevSeconds;
-        }
-
-        final hasDistancePR = currentDistance > maxDistance;
-        final hasTimePR = currentSeconds > maxSeconds;
-
-        if (!hasDistancePR && !hasTimePR) {
-          return false;
-        }
-
-        // Check if any earlier set in active session has same values
-        if (hasDistancePR) {
-          for (final record in allEntries) {
-            if (record.set.id == currentSet.id) break;
-            if (_activeSession != null &&
-                _isSetInSession(record.set, _activeSession!)) {
-              final prevDistance = record.entry.distance ?? 0;
-              if (prevDistance == currentDistance) {
-                return false;
-              }
-            }
-          }
-        }
-
-        if (hasTimePR) {
-          for (final record in allEntries) {
-            if (record.set.id == currentSet.id) break;
-            if (_activeSession != null &&
-                _isSetInSession(record.set, _activeSession!)) {
-              final prevSeconds = record.entry.duration?.inSeconds ?? 0;
-              if (prevSeconds == currentSeconds) {
-                return false;
-              }
-            }
-          }
-        }
-
-        return true;
-
-      case ExerciseUnit.repsTime:
-        // PR if either reps OR time is strictly higher (ignoring half reps)
-        final currentReps = entry.reps ?? 0;
-        final currentSeconds = entry.duration?.inSeconds ?? 0;
-
-        var maxReps = 0;
-        var maxSeconds = 0;
-
-        for (final record in allEntries) {
-          final prevReps = record.entry.reps ?? 0;
-          final prevSeconds = record.entry.duration?.inSeconds ?? 0;
-          if (prevReps > maxReps) maxReps = prevReps;
-          if (prevSeconds > maxSeconds) maxSeconds = prevSeconds;
-        }
-
-        final hasRepsPR = currentReps > maxReps;
-        final hasTimePR = currentSeconds > maxSeconds;
-
-        if (!hasRepsPR && !hasTimePR) {
-          return false;
-        }
-
-        // Check if any earlier set in active session has same values
-        if (hasRepsPR) {
-          for (final record in allEntries) {
-            if (record.set.id == currentSet.id) break;
-            if (_activeSession != null &&
-                _isSetInSession(record.set, _activeSession!)) {
-              final prevReps = record.entry.reps ?? 0;
-              if (prevReps == currentReps) {
-                return false;
-              }
-            }
-          }
-        }
-
-        if (hasTimePR) {
-          for (final record in allEntries) {
-            if (record.set.id == currentSet.id) break;
-            if (_activeSession != null &&
-                _isSetInSession(record.set, _activeSession!)) {
-              final prevSeconds = record.entry.duration?.inSeconds ?? 0;
-              if (prevSeconds == currentSeconds) {
-                return false;
-              }
-            }
-          }
-        }
-
-        return true;
-
-      case ExerciseUnit.distance:
-        // PR if distance is strictly higher
-        final currentDistance = entry.distance ?? 0;
-        var maxDistance = 0.0;
-
-        for (final record in allEntries) {
-          final prevDistance = record.entry.distance ?? 0;
-          if (prevDistance > maxDistance) maxDistance = prevDistance;
-        }
-
-        if (currentDistance <= maxDistance) {
-          return false;
-        }
-
-        // Check if any earlier set in active session has same distance
-        for (final record in allEntries) {
-          if (record.set.id == currentSet.id) break;
-          if (_activeSession != null &&
-              _isSetInSession(record.set, _activeSession!)) {
-            final prevDistance = record.entry.distance ?? 0;
-            if (prevDistance == currentDistance) {
-              return false;
-            }
-          }
-        }
-
-        return true;
-    }
-  }
-
-  /// Helper method to check if a set belongs to a session
-  bool _isSetInSession(WorkoutSet set, WorkoutSession session) {
-    for (final exerciseLog in session.exercises) {
-      for (final s in exerciseLog.sets) {
-        if (s.id == set.id) {
-          return true;
-        }
-      }
-    }
-    return false;
+    final prSets = getCurrentPRs(entry.exerciseId);
+    return prSets.contains(currentSet.id);
   }
 
   /// Get current PR sets for a specific exercise.
   /// Returns set IDs that hold current PRs.
+  ///
+  /// PR Rules:
+  /// 1. A set is a PR if at least one of its units (weight, reps, distance, time) is the highest
+  /// 2. For ties, the first logged set (earliest timestamp) is considered the PR
+  /// 3. For multi-unit exercises (e.g., weightReps), if a new set matches the max of one unit
+  ///    but exceeds another unit, it becomes a PR for that unit
   Set<String> getCurrentPRs(String exerciseId) {
     final exercise = exerciseById(exerciseId);
     if (exercise == null) {
       return <String>{};
     }
-
-    final prSetIds = <String>{};
 
     // Collect all single-exercise sets for this exercise from all sessions
     final allSets = <({WorkoutSet set, WorkoutSetEntry entry})>[];
@@ -1156,186 +831,186 @@ class GymLogProvider extends ChangeNotifier {
     }
 
     if (allSets.isEmpty) {
-      return prSetIds;
+      return <String>{};
     }
 
-    // Find max values for each metric
+    final prSetIds = <String>{};
+
     switch (exercise.unit) {
       case ExerciseUnit.weightReps:
-        var maxWeight = 0.0;
-        var maxReps = 0;
-
-        for (final record in allSets) {
-          final weight = record.entry.weight ?? 0;
-          final reps = record.entry.reps ?? 0;
-          if (weight > maxWeight) maxWeight = weight;
-          if (reps > maxReps) maxReps = reps;
-        }
-
-        // Find earliest set with max weight (if there are ties, pick the one with most reps)
-        String? maxWeightSetId;
-        var maxWeightWithMostReps = 0;
-        for (final record in allSets) {
-          final weight = record.entry.weight ?? 0;
-          final reps = record.entry.reps ?? 0;
-          if (weight == maxWeight) {
-            if (maxWeightSetId == null || reps > maxWeightWithMostReps) {
-              maxWeightSetId = record.set.id;
-              maxWeightWithMostReps = reps;
-            }
-          }
-        }
-
-        // Find earliest set with max reps (if there are ties, pick the one with most weight)
-        String? maxRepsSetId;
-        var maxRepsWithMostWeight = 0.0;
-        for (final record in allSets) {
-          final weight = record.entry.weight ?? 0;
-          final reps = record.entry.reps ?? 0;
-          if (reps == maxReps) {
-            if (maxRepsSetId == null || weight > maxRepsWithMostWeight) {
-              maxRepsSetId = record.set.id;
-              maxRepsWithMostWeight = weight;
-            }
-          }
-        }
-
-        if (maxWeightSetId != null) prSetIds.add(maxWeightSetId);
-        if (maxRepsSetId != null && maxRepsSetId != maxWeightSetId) {
-          prSetIds.add(maxRepsSetId);
-        }
+        _findPRsForWeightReps(allSets, prSetIds);
         break;
-
       case ExerciseUnit.reps:
-        var maxReps = 0;
-
-        for (final record in allSets) {
-          final reps = record.entry.reps ?? 0;
-          if (reps > maxReps) maxReps = reps;
-        }
-
-        // Find earliest set with max reps
-        for (final record in allSets) {
-          final reps = record.entry.reps ?? 0;
-          if (reps == maxReps) {
-            prSetIds.add(record.set.id);
-            break;
-          }
-        }
+        _findPRsForSingleMetric(allSets, prSetIds, (entry) => entry.reps ?? 0);
         break;
-
       case ExerciseUnit.time:
-        var maxSeconds = 0;
-
-        for (final record in allSets) {
-          final seconds = record.entry.duration?.inSeconds ?? 0;
-          if (seconds > maxSeconds) maxSeconds = seconds;
-        }
-
-        // Find earliest set with max time
-        for (final record in allSets) {
-          final seconds = record.entry.duration?.inSeconds ?? 0;
-          if (seconds == maxSeconds) {
-            prSetIds.add(record.set.id);
-            break;
-          }
-        }
+        _findPRsForSingleMetric(
+          allSets,
+          prSetIds,
+          (entry) => entry.duration?.inSeconds ?? 0,
+        );
         break;
-
       case ExerciseUnit.distanceTime:
-        var maxDistance = 0.0;
-        var maxSeconds = 0;
-
-        for (final record in allSets) {
-          final distance = record.entry.distance ?? 0;
-          final seconds = record.entry.duration?.inSeconds ?? 0;
-          if (distance > maxDistance) maxDistance = distance;
-          if (seconds > maxSeconds) maxSeconds = seconds;
-        }
-
-        // Find earliest set with max distance
-        String? maxDistanceSetId;
-        for (final record in allSets) {
-          final distance = record.entry.distance ?? 0;
-          if (distance == maxDistance) {
-            maxDistanceSetId = record.set.id;
-            break;
-          }
-        }
-
-        // Find earliest set with max time
-        String? maxSecondsSetId;
-        for (final record in allSets) {
-          final seconds = record.entry.duration?.inSeconds ?? 0;
-          if (seconds == maxSeconds) {
-            maxSecondsSetId = record.set.id;
-            break;
-          }
-        }
-
-        if (maxDistanceSetId != null) prSetIds.add(maxDistanceSetId);
-        if (maxSecondsSetId != null && maxSecondsSetId != maxDistanceSetId) {
-          prSetIds.add(maxSecondsSetId);
-        }
+        _findPRsForTwoMetrics(
+          allSets,
+          prSetIds,
+          (entry) => entry.distance ?? 0,
+          (entry) => entry.duration?.inSeconds ?? 0,
+        );
         break;
-
       case ExerciseUnit.repsTime:
-        var maxReps = 0;
-        var maxSeconds = 0;
-
-        for (final record in allSets) {
-          final reps = record.entry.reps ?? 0;
-          final seconds = record.entry.duration?.inSeconds ?? 0;
-          if (reps > maxReps) maxReps = reps;
-          if (seconds > maxSeconds) maxSeconds = seconds;
-        }
-
-        // Find earliest set with max reps
-        String? maxRepsSetId;
-        for (final record in allSets) {
-          final reps = record.entry.reps ?? 0;
-          if (reps == maxReps) {
-            maxRepsSetId = record.set.id;
-            break;
-          }
-        }
-
-        // Find earliest set with max time
-        String? maxSecondsSetId;
-        for (final record in allSets) {
-          final seconds = record.entry.duration?.inSeconds ?? 0;
-          if (seconds == maxSeconds) {
-            maxSecondsSetId = record.set.id;
-            break;
-          }
-        }
-
-        if (maxRepsSetId != null) prSetIds.add(maxRepsSetId);
-        if (maxSecondsSetId != null && maxSecondsSetId != maxRepsSetId) {
-          prSetIds.add(maxSecondsSetId);
-        }
+        _findPRsForTwoMetrics(
+          allSets,
+          prSetIds,
+          (entry) => entry.reps ?? 0,
+          (entry) => entry.duration?.inSeconds ?? 0,
+        );
         break;
-
       case ExerciseUnit.distance:
-        var maxDistance = 0.0;
-
-        for (final record in allSets) {
-          final distance = record.entry.distance ?? 0;
-          if (distance > maxDistance) maxDistance = distance;
-        }
-
-        // Find earliest set with max distance
-        for (final record in allSets) {
-          final distance = record.entry.distance ?? 0;
-          if (distance == maxDistance) {
-            prSetIds.add(record.set.id);
-            break;
-          }
-        }
+        _findPRsForSingleMetric(
+          allSets,
+          prSetIds,
+          (entry) => entry.distance ?? 0,
+        );
         break;
     }
 
     return prSetIds;
+  }
+
+  /// Find PRs for exercises with weight and reps
+  void _findPRsForWeightReps(
+    List<({WorkoutSet set, WorkoutSetEntry entry})> allSets,
+    Set<String> prSetIds,
+  ) {
+    // Find max values
+    var maxWeight = 0.0;
+    var maxReps = 0;
+
+    for (final record in allSets) {
+      final weight = record.entry.weight ?? 0;
+      final reps = record.entry.reps ?? 0;
+      if (weight > maxWeight) maxWeight = weight;
+      if (reps > maxReps) maxReps = reps;
+    }
+
+    // Find PR for max weight
+    // If multiple sets have max weight, pick the one with most reps
+    // If still tied, pick the earliest
+    String? maxWeightSetId;
+    var maxWeightBestReps = 0;
+    DateTime? maxWeightEarliestTime;
+
+    for (final record in allSets) {
+      final weight = record.entry.weight ?? 0;
+      final reps = record.entry.reps ?? 0;
+
+      if (weight == maxWeight) {
+        if (maxWeightSetId == null ||
+            reps > maxWeightBestReps ||
+            (reps == maxWeightBestReps &&
+                record.set.timestamp.isBefore(maxWeightEarliestTime!))) {
+          maxWeightSetId = record.set.id;
+          maxWeightBestReps = reps;
+          maxWeightEarliestTime = record.set.timestamp;
+        }
+      }
+    }
+
+    // Find PR for max reps
+    // If multiple sets have max reps, pick the one with most weight
+    // If still tied, pick the earliest
+    String? maxRepsSetId;
+    var maxRepsBestWeight = 0.0;
+    DateTime? maxRepsEarliestTime;
+
+    for (final record in allSets) {
+      final weight = record.entry.weight ?? 0;
+      final reps = record.entry.reps ?? 0;
+
+      if (reps == maxReps) {
+        if (maxRepsSetId == null ||
+            weight > maxRepsBestWeight ||
+            (weight == maxRepsBestWeight &&
+                record.set.timestamp.isBefore(maxRepsEarliestTime!))) {
+          maxRepsSetId = record.set.id;
+          maxRepsBestWeight = weight;
+          maxRepsEarliestTime = record.set.timestamp;
+        }
+      }
+    }
+
+    if (maxWeightSetId != null) prSetIds.add(maxWeightSetId);
+    if (maxRepsSetId != null && maxRepsSetId != maxWeightSetId) {
+      prSetIds.add(maxRepsSetId);
+    }
+  }
+
+  /// Find PRs for exercises with a single metric
+  void _findPRsForSingleMetric(
+    List<({WorkoutSet set, WorkoutSetEntry entry})> allSets,
+    Set<String> prSetIds,
+    num Function(WorkoutSetEntry) getValue,
+  ) {
+    // Find max value
+    num maxValue = 0;
+    for (final record in allSets) {
+      final value = getValue(record.entry);
+      if (value > maxValue) maxValue = value;
+    }
+
+    // Find earliest set with max value
+    for (final record in allSets) {
+      final value = getValue(record.entry);
+      if (value == maxValue) {
+        prSetIds.add(record.set.id);
+        break; // Only add the first (earliest) one
+      }
+    }
+  }
+
+  /// Find PRs for exercises with two metrics (e.g., distance & time, reps & time)
+  void _findPRsForTwoMetrics(
+    List<({WorkoutSet set, WorkoutSetEntry entry})> allSets,
+    Set<String> prSetIds,
+    num Function(WorkoutSetEntry) getValue1,
+    num Function(WorkoutSetEntry) getValue2,
+  ) {
+    // Find max values for both metrics
+    num maxValue1 = 0;
+    num maxValue2 = 0;
+
+    for (final record in allSets) {
+      final value1 = getValue1(record.entry);
+      final value2 = getValue2(record.entry);
+      if (value1 > maxValue1) maxValue1 = value1;
+      if (value2 > maxValue2) maxValue2 = value2;
+    }
+
+    // Find PR for first metric (earliest with max value1)
+    String? maxValue1SetId;
+    for (final record in allSets) {
+      final value1 = getValue1(record.entry);
+      if (value1 == maxValue1) {
+        maxValue1SetId = record.set.id;
+        break;
+      }
+    }
+
+    // Find PR for second metric (earliest with max value2)
+    String? maxValue2SetId;
+    for (final record in allSets) {
+      final value2 = getValue2(record.entry);
+      if (value2 == maxValue2) {
+        maxValue2SetId = record.set.id;
+        break;
+      }
+    }
+
+    if (maxValue1SetId != null) prSetIds.add(maxValue1SetId);
+    if (maxValue2SetId != null && maxValue2SetId != maxValue1SetId) {
+      prSetIds.add(maxValue2SetId);
+    }
   }
 
   @override
