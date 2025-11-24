@@ -11,6 +11,7 @@ import '../models/muscle_group.dart';
 import '../models/workout.dart';
 import '../providers/gym_log_provider.dart';
 import '../utils/workout_entry_formatter.dart';
+import '../widgets/scrollable_metrics_text.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -663,15 +664,9 @@ class _WorkoutSetTile extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Flexible(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  formatWorkoutEntry(entry),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              child: ScrollableMetricsText(
+                text: formatWorkoutEntry(entry),
+                backgroundColor: surfaceTint,
               ),
             ),
           ],
