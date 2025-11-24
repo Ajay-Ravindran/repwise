@@ -32,6 +32,22 @@ class GymLogProvider extends ChangeNotifier {
   List<MuscleGroup> get muscleGroups =>
       List<MuscleGroup>.unmodifiable(_muscleGroups);
   WorkoutSession? get activeSession => _activeSession;
+  List<WorkoutExerciseLog> get activeExercises => _activeSession == null
+      ? const <WorkoutExerciseLog>[]
+      : List<WorkoutExerciseLog>.unmodifiable(_activeSession!.exercises);
+  WorkoutExerciseLog? get activeExercise {
+    final session = _activeSession;
+    if (session == null) {
+      return null;
+    }
+    for (final exercise in session.exercises.reversed) {
+      if (!exercise.isComplete) {
+        return exercise;
+      }
+    }
+    return null;
+  }
+
   List<WorkoutSession> get completedSessions =>
       List<WorkoutSession>.unmodifiable(_completedSessions);
   Duration? get timerTotalDuration => _timerTotalDuration;
@@ -422,114 +438,285 @@ class GymLogProvider extends ChangeNotifier {
     if (_activeSession == null) {
       return;
     }
-    _completedSessions.insert(0, _activeSession!);
+    final session = _activeSession!;
+    session.exercises.removeWhere((exercise) => exercise.sets.isEmpty);
+    if (session.exercises.isEmpty) {
+      _activeSession = null;
+      notifyListeners();
+      unawaited(_persist());
+      return;
+    }
+    final completionTime = DateTime.now();
+    for (final exercise in session.exercises) {
+      exercise.finishedAt ??= completionTime;
+    }
+    _completedSessions.insert(0, session);
     _activeSession = null;
     notifyListeners();
     unawaited(_persist());
   }
 
-  bool addSet({
+  WorkoutExerciseLog? startExercise({
     required String muscleGroupId,
-    required List<WorkoutSetEntry> entries,
+    required List<String> exerciseIds,
   }) {
     final session = _activeSession;
-    if (session == null || entries.isEmpty) {
-      return false;
+    if (session == null) {
+      return null;
     }
-    final hasGroup = _muscleGroups.any((group) => group.id == muscleGroupId);
-    if (!hasGroup) {
-      return false;
+    if (activeExercise != null) {
+      return null;
     }
-    final validEntries = entries
-        .where((entry) => entry.hasMetrics)
-        .toList(growable: false);
-    if (validEntries.isEmpty) {
-      return false;
+    if (!_muscleGroups.any((group) => group.id == muscleGroupId)) {
+      return null;
     }
-    final set = WorkoutSet(
+    final uniqueIds = Set<String>.from(exerciseIds).toList();
+    if (uniqueIds.isEmpty) {
+      return null;
+    }
+    final group = muscleGroupById(muscleGroupId);
+    if (group == null) {
+      return null;
+    }
+    final allowed = group.exercises.map((exercise) => exercise.id).toSet();
+    if (!uniqueIds.every(allowed.contains)) {
+      return null;
+    }
+    final log = WorkoutExerciseLog(
       id: _uuid.v4(),
       muscleGroupId: muscleGroupId,
-      entries: validEntries,
-      timestamp: DateTime.now(),
+      exerciseIds: uniqueIds,
+      startedAt: DateTime.now(),
     );
-    session.sets.add(set);
+    session.exercises.add(log);
     notifyListeners();
     unawaited(_persist());
-    return true;
+    return log;
   }
 
-  bool updateSet({
-    required String setId,
-    required String muscleGroupId,
-    required List<WorkoutSetEntry> entries,
-  }) {
-    final session = _activeSession;
-    if (session == null || entries.isEmpty) {
-      return false;
-    }
-    final setIndex = session.sets.indexWhere((set) => set.id == setId);
-    if (setIndex == -1) {
-      return false;
-    }
-    final hasGroup = _muscleGroups.any((group) => group.id == muscleGroupId);
-    if (!hasGroup) {
-      return false;
-    }
-    final validEntries = entries
-        .where((entry) => entry.hasMetrics)
-        .toList(growable: false);
-    if (validEntries.isEmpty) {
-      return false;
-    }
-    final existing = session.sets[setIndex];
-    session.sets[setIndex] = WorkoutSet(
-      id: existing.id,
-      muscleGroupId: muscleGroupId,
-      entries: validEntries,
-      timestamp: existing.timestamp,
-    );
-    notifyListeners();
-    unawaited(_persist());
-    return true;
-  }
-
-  bool removeActiveSet(String setId) {
+  bool cancelExercise(String exerciseLogId) {
     final session = _activeSession;
     if (session == null) {
       return false;
     }
-    final index = session.sets.indexWhere((set) => set.id == setId);
+    final index = session.exercises.indexWhere(
+      (exercise) => exercise.id == exerciseLogId,
+    );
     if (index == -1) {
       return false;
     }
-    session.sets.removeAt(index);
+    final exercise = session.exercises[index];
+    if (exercise.hasSets) {
+      return false;
+    }
+    session.exercises.removeAt(index);
     notifyListeners();
     unawaited(_persist());
     return true;
   }
 
-  bool reorderActiveSet(int oldIndex, int newIndex) {
+  bool completeExercise(String exerciseLogId) {
     final session = _activeSession;
     if (session == null) {
       return false;
     }
-    if (oldIndex < 0 || oldIndex >= session.sets.length) {
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
       return false;
     }
-    if (newIndex < 0 || newIndex > session.sets.length) {
+    if (!exercise.hasSets) {
       return false;
     }
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
-    final moved = session.sets.removeAt(oldIndex);
-    session.sets.insert(newIndex, moved);
+    exercise.finishedAt = DateTime.now();
     notifyListeners();
     unawaited(_persist());
     return true;
   }
 
-  bool removeCompletedSet({required String sessionId, required String setId}) {
+  bool reopenExercise(String exerciseLogId) {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final currentActive = activeExercise;
+    if (currentActive != null && currentActive.id != exerciseLogId) {
+      return false;
+    }
+    exercise.finishedAt = null;
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  bool addSetToExercise({
+    required String exerciseLogId,
+    required List<WorkoutSetEntry> entries,
+  }) {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final group = muscleGroupById(exercise.muscleGroupId);
+    if (group == null) {
+      return false;
+    }
+    final allowedIds = group.exercises.map((exercise) => exercise.id).toSet();
+    final validEntries = entries
+        .where(
+          (entry) => entry.hasMetrics && allowedIds.contains(entry.exerciseId),
+        )
+        .toList(growable: false);
+    if (validEntries.isEmpty) {
+      return false;
+    }
+    final newIds = validEntries
+        .map((entry) => entry.exerciseId)
+        .where((id) => !exercise.exerciseIds.contains(id))
+        .toSet();
+    if (newIds.isNotEmpty) {
+      exercise.exerciseIds.addAll(newIds);
+    }
+    final set = WorkoutSet(
+      id: _uuid.v4(),
+      muscleGroupId: exercise.muscleGroupId,
+      entries: validEntries,
+      timestamp: DateTime.now(),
+    );
+    exercise.sets.add(set);
+    exercise.finishedAt = null;
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  bool updateSetInExercise({
+    required String exerciseLogId,
+    required String setId,
+    required List<WorkoutSetEntry> entries,
+  }) {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final group = muscleGroupById(exercise.muscleGroupId);
+    if (group == null) {
+      return false;
+    }
+    final allowedIds = group.exercises.map((exercise) => exercise.id).toSet();
+    final validEntries = entries
+        .where(
+          (entry) => entry.hasMetrics && allowedIds.contains(entry.exerciseId),
+        )
+        .toList(growable: false);
+    if (validEntries.isEmpty) {
+      return false;
+    }
+    final setIndex = exercise.sets.indexWhere((set) => set.id == setId);
+    if (setIndex == -1) {
+      return false;
+    }
+    final existing = exercise.sets[setIndex];
+    exercise.sets[setIndex] = WorkoutSet(
+      id: existing.id,
+      muscleGroupId: exercise.muscleGroupId,
+      entries: validEntries,
+      timestamp: existing.timestamp,
+    );
+    exercise.finishedAt = null;
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  bool removeSetFromExercise({
+    required String exerciseLogId,
+    required String setId,
+  }) {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final index = exercise.sets.indexWhere((set) => set.id == setId);
+    if (index == -1) {
+      return false;
+    }
+    exercise.sets.removeAt(index);
+    if (exercise.sets.isEmpty) {
+      exercise.finishedAt = null;
+    }
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  bool reorderSetsInExercise({
+    required String exerciseLogId,
+    required int oldIndex,
+    required int newIndex,
+  }) {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    if (oldIndex < 0 || oldIndex >= exercise.sets.length) {
+      return false;
+    }
+    if (newIndex < 0 || newIndex > exercise.sets.length) {
+      return false;
+    }
+    var targetIndex = newIndex;
+    if (targetIndex > oldIndex) {
+      targetIndex -= 1;
+    }
+    final moved = exercise.sets.removeAt(oldIndex);
+    exercise.sets.insert(targetIndex, moved);
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  bool removeActiveExercise(String exerciseLogId) {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+    final index = session.exercises.indexWhere(
+      (exercise) => exercise.id == exerciseLogId,
+    );
+    if (index == -1) {
+      return false;
+    }
+    session.exercises.removeAt(index);
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  bool removeCompletedSet({
+    required String sessionId,
+    required String exerciseLogId,
+    required String setId,
+  }) {
     final sessionIndex = _completedSessions.indexWhere(
       (session) => session.id == sessionId,
     );
@@ -537,12 +724,19 @@ class GymLogProvider extends ChangeNotifier {
       return false;
     }
     final session = _completedSessions[sessionIndex];
-    final setIndex = session.sets.indexWhere((set) => set.id == setId);
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final setIndex = exercise.sets.indexWhere((set) => set.id == setId);
     if (setIndex == -1) {
       return false;
     }
-    session.sets.removeAt(setIndex);
-    if (session.sets.isEmpty) {
+    exercise.sets.removeAt(setIndex);
+    if (exercise.sets.isEmpty) {
+      session.exercises.removeWhere((element) => element.id == exerciseLogId);
+    }
+    if (session.exercises.isEmpty) {
       _completedSessions.removeAt(sessionIndex);
     }
     notifyListeners();
@@ -561,8 +755,563 @@ class GymLogProvider extends ChangeNotifier {
     return null;
   }
 
+  WorkoutExerciseLog? _exerciseById(WorkoutSession session, String exerciseId) {
+    for (final exercise in session.exercises) {
+      if (exercise.id == exerciseId) {
+        return exercise;
+      }
+    }
+    return null;
+  }
+
   DateTime _dateOnly(DateTime dateTime) =>
       DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+  /// Check if a set entry is a personal record.
+  /// Only checks for single-exercise sets (not supersets).
+  /// For multi-unit exercises, returns true if ANY unit is a PR.
+  /// Ignores half reps in PR calculations.
+  /// Only marks the first set with the highest value as a PR.
+  bool isPersonalRecord(
+    WorkoutSetEntry entry,
+    WorkoutSet currentSet, {
+    WorkoutSession? excludeSession,
+  }) {
+    // Only track PRs for single-exercise sets
+    if (currentSet.entries.length > 1) {
+      return false;
+    }
+
+    final exercise = exerciseById(entry.exerciseId);
+    if (exercise == null) {
+      return false;
+    }
+
+    // Gather all entries for this exercise (including current session)
+    final allEntries = <({WorkoutSet set, WorkoutSetEntry entry})>[];
+
+    // Check completed sessions
+    for (final session in _completedSessions) {
+      if (excludeSession != null && session.id == excludeSession.id) {
+        continue;
+      }
+      for (final exerciseLog in session.exercises) {
+        for (final set in exerciseLog.sets) {
+          // Only compare single-exercise sets
+          if (set.entries.length == 1) {
+            for (final prevEntry in set.entries) {
+              if (prevEntry.exerciseId == entry.exerciseId) {
+                allEntries.add((set: set, entry: prevEntry));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Check active session if not excluded
+    if (_activeSession != null &&
+        (excludeSession == null || _activeSession!.id != excludeSession.id)) {
+      for (final exerciseLog in _activeSession!.exercises) {
+        for (final set in exerciseLog.sets) {
+          // Only compare single-exercise sets, and exclude the current set
+          if (set.entries.length == 1 && set.id != currentSet.id) {
+            for (final prevEntry in set.entries) {
+              if (prevEntry.exerciseId == entry.exerciseId) {
+                allEntries.add((set: set, entry: prevEntry));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // If no other entries, this is the first time doing this exercise
+    if (allEntries.isEmpty) {
+      return true; // First time is always a PR
+    }
+
+    // Check based on exercise unit type
+    switch (exercise.unit) {
+      case ExerciseUnit.weightReps:
+        // PR if either weight OR reps is strictly higher (ignoring half reps)
+        final currentWeight = entry.weight ?? 0;
+        final currentReps = entry.reps ?? 0;
+
+        var maxWeight = 0.0;
+        var maxReps = 0;
+
+        for (final record in allEntries) {
+          final prevWeight = record.entry.weight ?? 0;
+          final prevReps = record.entry.reps ?? 0;
+          if (prevWeight > maxWeight) maxWeight = prevWeight;
+          if (prevReps > maxReps) maxReps = prevReps;
+        }
+
+        // Check if current set has higher weight or reps than all previous
+        final hasWeightPR = currentWeight > maxWeight;
+        final hasRepsPR = currentReps > maxReps;
+
+        if (!hasWeightPR && !hasRepsPR) {
+          return false;
+        }
+
+        // If it has a PR, check if it's the first set with this value in the active session
+        if (hasWeightPR && currentWeight >= maxWeight) {
+          // Check if any earlier set in active session has same weight
+          for (final record in allEntries) {
+            if (record.set.id == currentSet.id) break;
+            if (_activeSession != null &&
+                _isSetInSession(record.set, _activeSession!)) {
+              final prevWeight = record.entry.weight ?? 0;
+              if (prevWeight == currentWeight) {
+                return false; // Earlier set has same weight
+              }
+            }
+          }
+        }
+
+        if (hasRepsPR && currentReps >= maxReps) {
+          // Check if any earlier set in active session has same reps
+          for (final record in allEntries) {
+            if (record.set.id == currentSet.id) break;
+            if (_activeSession != null &&
+                _isSetInSession(record.set, _activeSession!)) {
+              final prevReps = record.entry.reps ?? 0;
+              if (prevReps == currentReps) {
+                return false; // Earlier set has same reps
+              }
+            }
+          }
+        }
+
+        return true;
+
+      case ExerciseUnit.reps:
+        // PR if reps is strictly higher (ignoring half reps)
+        final currentReps = entry.reps ?? 0;
+        var maxReps = 0;
+
+        for (final record in allEntries) {
+          final prevReps = record.entry.reps ?? 0;
+          if (prevReps > maxReps) maxReps = prevReps;
+        }
+
+        if (currentReps <= maxReps) {
+          return false;
+        }
+
+        // Check if any earlier set in active session has same reps
+        for (final record in allEntries) {
+          if (record.set.id == currentSet.id) break;
+          if (_activeSession != null &&
+              _isSetInSession(record.set, _activeSession!)) {
+            final prevReps = record.entry.reps ?? 0;
+            if (prevReps == currentReps) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+
+      case ExerciseUnit.time:
+        // PR if time is strictly higher
+        final currentSeconds = entry.duration?.inSeconds ?? 0;
+        var maxSeconds = 0;
+
+        for (final record in allEntries) {
+          final prevSeconds = record.entry.duration?.inSeconds ?? 0;
+          if (prevSeconds > maxSeconds) maxSeconds = prevSeconds;
+        }
+
+        if (currentSeconds <= maxSeconds) {
+          return false;
+        }
+
+        // Check if any earlier set in active session has same time
+        for (final record in allEntries) {
+          if (record.set.id == currentSet.id) break;
+          if (_activeSession != null &&
+              _isSetInSession(record.set, _activeSession!)) {
+            final prevSeconds = record.entry.duration?.inSeconds ?? 0;
+            if (prevSeconds == currentSeconds) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+
+      case ExerciseUnit.distanceTime:
+        // PR if either distance OR time is strictly higher
+        final currentDistance = entry.distance ?? 0;
+        final currentSeconds = entry.duration?.inSeconds ?? 0;
+
+        var maxDistance = 0.0;
+        var maxSeconds = 0;
+
+        for (final record in allEntries) {
+          final prevDistance = record.entry.distance ?? 0;
+          final prevSeconds = record.entry.duration?.inSeconds ?? 0;
+          if (prevDistance > maxDistance) maxDistance = prevDistance;
+          if (prevSeconds > maxSeconds) maxSeconds = prevSeconds;
+        }
+
+        final hasDistancePR = currentDistance > maxDistance;
+        final hasTimePR = currentSeconds > maxSeconds;
+
+        if (!hasDistancePR && !hasTimePR) {
+          return false;
+        }
+
+        // Check if any earlier set in active session has same values
+        if (hasDistancePR) {
+          for (final record in allEntries) {
+            if (record.set.id == currentSet.id) break;
+            if (_activeSession != null &&
+                _isSetInSession(record.set, _activeSession!)) {
+              final prevDistance = record.entry.distance ?? 0;
+              if (prevDistance == currentDistance) {
+                return false;
+              }
+            }
+          }
+        }
+
+        if (hasTimePR) {
+          for (final record in allEntries) {
+            if (record.set.id == currentSet.id) break;
+            if (_activeSession != null &&
+                _isSetInSession(record.set, _activeSession!)) {
+              final prevSeconds = record.entry.duration?.inSeconds ?? 0;
+              if (prevSeconds == currentSeconds) {
+                return false;
+              }
+            }
+          }
+        }
+
+        return true;
+
+      case ExerciseUnit.repsTime:
+        // PR if either reps OR time is strictly higher (ignoring half reps)
+        final currentReps = entry.reps ?? 0;
+        final currentSeconds = entry.duration?.inSeconds ?? 0;
+
+        var maxReps = 0;
+        var maxSeconds = 0;
+
+        for (final record in allEntries) {
+          final prevReps = record.entry.reps ?? 0;
+          final prevSeconds = record.entry.duration?.inSeconds ?? 0;
+          if (prevReps > maxReps) maxReps = prevReps;
+          if (prevSeconds > maxSeconds) maxSeconds = prevSeconds;
+        }
+
+        final hasRepsPR = currentReps > maxReps;
+        final hasTimePR = currentSeconds > maxSeconds;
+
+        if (!hasRepsPR && !hasTimePR) {
+          return false;
+        }
+
+        // Check if any earlier set in active session has same values
+        if (hasRepsPR) {
+          for (final record in allEntries) {
+            if (record.set.id == currentSet.id) break;
+            if (_activeSession != null &&
+                _isSetInSession(record.set, _activeSession!)) {
+              final prevReps = record.entry.reps ?? 0;
+              if (prevReps == currentReps) {
+                return false;
+              }
+            }
+          }
+        }
+
+        if (hasTimePR) {
+          for (final record in allEntries) {
+            if (record.set.id == currentSet.id) break;
+            if (_activeSession != null &&
+                _isSetInSession(record.set, _activeSession!)) {
+              final prevSeconds = record.entry.duration?.inSeconds ?? 0;
+              if (prevSeconds == currentSeconds) {
+                return false;
+              }
+            }
+          }
+        }
+
+        return true;
+
+      case ExerciseUnit.distance:
+        // PR if distance is strictly higher
+        final currentDistance = entry.distance ?? 0;
+        var maxDistance = 0.0;
+
+        for (final record in allEntries) {
+          final prevDistance = record.entry.distance ?? 0;
+          if (prevDistance > maxDistance) maxDistance = prevDistance;
+        }
+
+        if (currentDistance <= maxDistance) {
+          return false;
+        }
+
+        // Check if any earlier set in active session has same distance
+        for (final record in allEntries) {
+          if (record.set.id == currentSet.id) break;
+          if (_activeSession != null &&
+              _isSetInSession(record.set, _activeSession!)) {
+            final prevDistance = record.entry.distance ?? 0;
+            if (prevDistance == currentDistance) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+    }
+  }
+
+  /// Helper method to check if a set belongs to a session
+  bool _isSetInSession(WorkoutSet set, WorkoutSession session) {
+    for (final exerciseLog in session.exercises) {
+      for (final s in exerciseLog.sets) {
+        if (s.id == set.id) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Get current PR sets for a specific exercise.
+  /// Returns set IDs that hold current PRs.
+  Set<String> getCurrentPRs(String exerciseId) {
+    final exercise = exerciseById(exerciseId);
+    if (exercise == null) {
+      return <String>{};
+    }
+
+    final prSetIds = <String>{};
+
+    // Collect all single-exercise sets for this exercise from all sessions
+    final allSets = <({WorkoutSet set, WorkoutSetEntry entry})>[];
+
+    // Collect from completed sessions
+    for (final session in _completedSessions) {
+      for (final exerciseLog in session.exercises) {
+        for (final set in exerciseLog.sets) {
+          if (set.entries.length == 1) {
+            for (final entry in set.entries) {
+              if (entry.exerciseId == exerciseId) {
+                allSets.add((set: set, entry: entry));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Collect from active session
+    if (_activeSession != null) {
+      for (final exerciseLog in _activeSession!.exercises) {
+        for (final set in exerciseLog.sets) {
+          if (set.entries.length == 1) {
+            for (final entry in set.entries) {
+              if (entry.exerciseId == exerciseId) {
+                allSets.add((set: set, entry: entry));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (allSets.isEmpty) {
+      return prSetIds;
+    }
+
+    // Find max values for each metric
+    switch (exercise.unit) {
+      case ExerciseUnit.weightReps:
+        var maxWeight = 0.0;
+        var maxReps = 0;
+
+        for (final record in allSets) {
+          final weight = record.entry.weight ?? 0;
+          final reps = record.entry.reps ?? 0;
+          if (weight > maxWeight) maxWeight = weight;
+          if (reps > maxReps) maxReps = reps;
+        }
+
+        // Find earliest set with max weight (if there are ties, pick the one with most reps)
+        String? maxWeightSetId;
+        var maxWeightWithMostReps = 0;
+        for (final record in allSets) {
+          final weight = record.entry.weight ?? 0;
+          final reps = record.entry.reps ?? 0;
+          if (weight == maxWeight) {
+            if (maxWeightSetId == null || reps > maxWeightWithMostReps) {
+              maxWeightSetId = record.set.id;
+              maxWeightWithMostReps = reps;
+            }
+          }
+        }
+
+        // Find earliest set with max reps (if there are ties, pick the one with most weight)
+        String? maxRepsSetId;
+        var maxRepsWithMostWeight = 0.0;
+        for (final record in allSets) {
+          final weight = record.entry.weight ?? 0;
+          final reps = record.entry.reps ?? 0;
+          if (reps == maxReps) {
+            if (maxRepsSetId == null || weight > maxRepsWithMostWeight) {
+              maxRepsSetId = record.set.id;
+              maxRepsWithMostWeight = weight;
+            }
+          }
+        }
+
+        if (maxWeightSetId != null) prSetIds.add(maxWeightSetId);
+        if (maxRepsSetId != null && maxRepsSetId != maxWeightSetId) {
+          prSetIds.add(maxRepsSetId);
+        }
+        break;
+
+      case ExerciseUnit.reps:
+        var maxReps = 0;
+
+        for (final record in allSets) {
+          final reps = record.entry.reps ?? 0;
+          if (reps > maxReps) maxReps = reps;
+        }
+
+        // Find earliest set with max reps
+        for (final record in allSets) {
+          final reps = record.entry.reps ?? 0;
+          if (reps == maxReps) {
+            prSetIds.add(record.set.id);
+            break;
+          }
+        }
+        break;
+
+      case ExerciseUnit.time:
+        var maxSeconds = 0;
+
+        for (final record in allSets) {
+          final seconds = record.entry.duration?.inSeconds ?? 0;
+          if (seconds > maxSeconds) maxSeconds = seconds;
+        }
+
+        // Find earliest set with max time
+        for (final record in allSets) {
+          final seconds = record.entry.duration?.inSeconds ?? 0;
+          if (seconds == maxSeconds) {
+            prSetIds.add(record.set.id);
+            break;
+          }
+        }
+        break;
+
+      case ExerciseUnit.distanceTime:
+        var maxDistance = 0.0;
+        var maxSeconds = 0;
+
+        for (final record in allSets) {
+          final distance = record.entry.distance ?? 0;
+          final seconds = record.entry.duration?.inSeconds ?? 0;
+          if (distance > maxDistance) maxDistance = distance;
+          if (seconds > maxSeconds) maxSeconds = seconds;
+        }
+
+        // Find earliest set with max distance
+        String? maxDistanceSetId;
+        for (final record in allSets) {
+          final distance = record.entry.distance ?? 0;
+          if (distance == maxDistance) {
+            maxDistanceSetId = record.set.id;
+            break;
+          }
+        }
+
+        // Find earliest set with max time
+        String? maxSecondsSetId;
+        for (final record in allSets) {
+          final seconds = record.entry.duration?.inSeconds ?? 0;
+          if (seconds == maxSeconds) {
+            maxSecondsSetId = record.set.id;
+            break;
+          }
+        }
+
+        if (maxDistanceSetId != null) prSetIds.add(maxDistanceSetId);
+        if (maxSecondsSetId != null && maxSecondsSetId != maxDistanceSetId) {
+          prSetIds.add(maxSecondsSetId);
+        }
+        break;
+
+      case ExerciseUnit.repsTime:
+        var maxReps = 0;
+        var maxSeconds = 0;
+
+        for (final record in allSets) {
+          final reps = record.entry.reps ?? 0;
+          final seconds = record.entry.duration?.inSeconds ?? 0;
+          if (reps > maxReps) maxReps = reps;
+          if (seconds > maxSeconds) maxSeconds = seconds;
+        }
+
+        // Find earliest set with max reps
+        String? maxRepsSetId;
+        for (final record in allSets) {
+          final reps = record.entry.reps ?? 0;
+          if (reps == maxReps) {
+            maxRepsSetId = record.set.id;
+            break;
+          }
+        }
+
+        // Find earliest set with max time
+        String? maxSecondsSetId;
+        for (final record in allSets) {
+          final seconds = record.entry.duration?.inSeconds ?? 0;
+          if (seconds == maxSeconds) {
+            maxSecondsSetId = record.set.id;
+            break;
+          }
+        }
+
+        if (maxRepsSetId != null) prSetIds.add(maxRepsSetId);
+        if (maxSecondsSetId != null && maxSecondsSetId != maxRepsSetId) {
+          prSetIds.add(maxSecondsSetId);
+        }
+        break;
+
+      case ExerciseUnit.distance:
+        var maxDistance = 0.0;
+
+        for (final record in allSets) {
+          final distance = record.entry.distance ?? 0;
+          if (distance > maxDistance) maxDistance = distance;
+        }
+
+        // Find earliest set with max distance
+        for (final record in allSets) {
+          final distance = record.entry.distance ?? 0;
+          if (distance == maxDistance) {
+            prSetIds.add(record.set.id);
+            break;
+          }
+        }
+        break;
+    }
+
+    return prSetIds;
+  }
 
   @override
   void dispose() {

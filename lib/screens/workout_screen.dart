@@ -17,66 +17,291 @@ import '../widgets/scrollable_metrics_text.dart';
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
 
-  static Future<void> showAddSetSheet(
-    BuildContext context, {
-    WorkoutSet? initialSet,
-  }) async {
+  static Future<void> showStartExerciseSheet(BuildContext context) async {
     final rootContext = context;
     final provider = rootContext.read<GymLogProvider>();
-    final groups = provider.muscleGroups;
     final session = provider.activeSession;
     if (session == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(content: Text('Start a workout before adding sets.')),
-      );
-      return;
-    }
-    if (groups.isEmpty) {
-      ScaffoldMessenger.of(rootContext).showSnackBar(
         const SnackBar(
-          content: Text('Add a muscle group and exercises first.'),
+          content: Text('Start a workout before selecting exercises.'),
         ),
       );
       return;
     }
+    if (provider.activeExercise != null) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Finish or cancel the current exercise before starting another.',
+          ),
+        ),
+      );
+      return;
+    }
+    final groups = provider.muscleGroups
+        .where((group) => group.exercises.isNotEmpty)
+        .toList();
+    if (groups.isEmpty) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(
+          content: Text('Add exercises in the library before starting.'),
+        ),
+      );
+      return;
+    }
+
+    var selectedGroupId = groups.first.id;
+    final Set<String> selectedExerciseIds = <String>{
+      if (groups.first.exercises.isNotEmpty) groups.first.exercises.first.id,
+    };
+
+    await showModalBottomSheet<void>(
+      context: rootContext,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 24,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              final group = groups.firstWhere(
+                (candidate) => candidate.id == selectedGroupId,
+              );
+              final exercises = group.exercises;
+
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Add Exercise',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Select a muscle group and one or more exercises to add to your workout. '
+                      'Exercises selected together are tracked as a superset.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 16),
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Muscle group',
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedGroupId,
+                          isExpanded: true,
+                          items: groups
+                              .map(
+                                (group) => DropdownMenuItem<String>(
+                                  value: group.id,
+                                  child: Text(group.name),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null || value == selectedGroupId) {
+                              return;
+                            }
+                            setState(() {
+                              selectedGroupId = value;
+                              selectedExerciseIds
+                                ..clear()
+                                ..addAll(
+                                  groups
+                                      .firstWhere(
+                                        (group) => group.id == selectedGroupId,
+                                      )
+                                      .exercises
+                                      .map((exercise) => exercise.id)
+                                      .take(1),
+                                );
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (exercises.isEmpty)
+                      const Text(
+                        'No exercises available for this muscle group yet.',
+                      )
+                    else
+                      Column(
+                        children: exercises.map((exercise) {
+                          final isSelected = selectedExerciseIds.contains(
+                            exercise.id,
+                          );
+                          return CheckboxListTile(
+                            value: isSelected,
+                            onChanged: (checked) {
+                              setState(() {
+                                if (checked ?? false) {
+                                  selectedExerciseIds.add(exercise.id);
+                                } else {
+                                  selectedExerciseIds.remove(exercise.id);
+                                }
+                              });
+                            },
+                            title: Text(exercise.name),
+                            subtitle: Text(exercise.unit.label),
+                          );
+                        }).toList(),
+                      ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: selectedExerciseIds.isEmpty
+                          ? null
+                          : () {
+                              final log = provider.startExercise(
+                                muscleGroupId: selectedGroupId,
+                                exerciseIds: selectedExerciseIds.toList(),
+                              );
+                              if (log == null) {
+                                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Unable to start exercise.'),
+                                  ),
+                                );
+                                return;
+                              }
+                              Navigator.of(sheetContext).pop();
+                              ScaffoldMessenger.of(rootContext).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    log.isSuperset
+                                        ? 'Superset started.'
+                                        : 'Exercise started.',
+                                  ),
+                                ),
+                              );
+                            },
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Add Exercise'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  static Future<void> showAddSetSheet(
+    BuildContext context, {
+    required WorkoutExerciseLog exerciseLog,
+    WorkoutSet? initialSet,
+  }) async {
+    final rootContext = context;
+    final provider = rootContext.read<GymLogProvider>();
+    final session = provider.activeSession;
+    if (session == null) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(content: Text('Start a workout before logging sets.')),
+      );
+      return;
+    }
+
+    WorkoutExerciseLog? currentExercise;
+    for (final log in session.exercises) {
+      if (log.id == exerciseLog.id) {
+        currentExercise = log;
+        break;
+      }
+    }
+    if (currentExercise == null) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(content: Text('This exercise is no longer active.')),
+      );
+      return;
+    }
+
+    final group = provider.muscleGroupById(currentExercise.muscleGroupId);
+    if (group == null) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(
+          content: Text('Muscle group for this exercise is missing.'),
+        ),
+      );
+      return;
+    }
+
+    WorkoutSet? existingSet;
     final bool isEditing = initialSet != null;
     if (isEditing) {
-      final exists = session.sets.any((set) => set.id == initialSet.id);
-      if (!exists) {
+      final targetId = initialSet.id;
+      for (final set in currentExercise.sets) {
+        if (set.id == targetId) {
+          existingSet = set;
+          break;
+        }
+      }
+      if (existingSet == null) {
         ScaffoldMessenger.of(rootContext).showSnackBar(
           const SnackBar(content: Text('Set is no longer available.')),
         );
         return;
       }
-      final groupExists = groups.any(
-        (group) => group.id == initialSet.muscleGroupId,
-      );
-      if (!groupExists) {
-        ScaffoldMessenger.of(rootContext).showSnackBar(
-          const SnackBar(
-            content: Text('Muscle group for this set no longer exists.'),
+    }
+
+    final List<Exercise> exercises = group.exercises;
+    if (exercises.isEmpty) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Add exercises for this muscle group before logging sets.',
           ),
-        );
-        return;
+        ),
+      );
+      return;
+    }
+
+    final Map<String, Exercise> exercisesById = <String, Exercise>{
+      for (final exercise in exercises) exercise.id: exercise,
+    };
+    if (currentExercise.exerciseIds.isNotEmpty) {
+      for (final id in currentExercise.exerciseIds) {
+        final cached = provider.exerciseById(id);
+        if (cached != null) {
+          exercisesById.putIfAbsent(id, () => cached);
+        }
       }
     }
-    String selectedGroupId = isEditing
-        ? initialSet.muscleGroupId
-        : groups.first.id;
-    String? validationError;
 
-    var selectionCounter = 0;
-    String nextSelectionId() => 'entry_${selectionCounter++}';
-    final List<_DraftSetEntry> draftEntries = <_DraftSetEntry>[];
+    var draftCounter = 0;
+    String nextDraftId() => 'draft_${draftCounter++}';
+    final List<_DraftSetEntry> drafts = <_DraftSetEntry>[];
 
-    final MuscleGroup initialGroup = groups.firstWhere(
-      (group) => group.id == selectedGroupId,
-    );
+    // Determine which set to use for pre-population
+    WorkoutSet? setToPopulateFrom;
+    if (isEditing && existingSet != null) {
+      setToPopulateFrom = existingSet;
+    } else if (!isEditing && currentExercise.sets.isNotEmpty) {
+      // Pre-populate from the last set when adding a new set
+      setToPopulateFrom = currentExercise.sets.last;
+    }
 
-    if (isEditing) {
-      for (final entry in initialSet.entries) {
+    if (setToPopulateFrom != null) {
+      for (final entry in setToPopulateFrom.entries) {
         final draft = _DraftSetEntry(
-          id: nextSelectionId(),
+          id: nextDraftId(),
           exerciseId: entry.exerciseId,
         );
         if (entry.reps != null) {
@@ -97,15 +322,25 @@ class WorkoutScreen extends StatefulWidget {
         if (entry.comment != null) {
           draft.comment = entry.comment!;
         }
-        draftEntries.add(draft);
+        drafts.add(draft);
       }
     } else {
-      final draft = _DraftSetEntry(id: nextSelectionId());
-      if (initialGroup.exercises.isNotEmpty) {
-        draft.exerciseId = initialGroup.exercises.first.id;
+      final List<String> defaultIds = currentExercise.exerciseIds
+          .where((id) => exercisesById.containsKey(id))
+          .toList();
+      if (defaultIds.isEmpty && exercises.isNotEmpty) {
+        defaultIds.add(exercises.first.id);
       }
-      draftEntries.add(draft);
+      if (defaultIds.isEmpty) {
+        drafts.add(_DraftSetEntry(id: nextDraftId()));
+      } else {
+        for (final id in defaultIds) {
+          drafts.add(_DraftSetEntry(id: nextDraftId(), exerciseId: id));
+        }
+      }
     }
+
+    String? validationError;
 
     await showModalBottomSheet<void>(
       context: rootContext,
@@ -120,45 +355,12 @@ class WorkoutScreen extends StatefulWidget {
           ),
           child: StatefulBuilder(
             builder: (context, setState) {
-              final MuscleGroup selectedGroup = groups.firstWhere(
-                (group) => group.id == selectedGroupId,
-              );
-              final List<Exercise> exercises = selectedGroup.exercises;
-              final Map<String, Exercise> exercisesById = <String, Exercise>{
-                for (final exercise in exercises) exercise.id: exercise,
-              };
-
-              void setExerciseForEntry(
-                _DraftSetEntry entry,
-                String? exerciseId,
-              ) {
-                entry.exerciseId = exerciseId;
-                entry.reps = '';
-                entry.weight = '';
-                entry.distance = '';
-                entry.time = '';
-                entry.halfReps = '';
-                entry.comment = '';
-                validationError = null;
-              }
-
-              void resetDraftEntriesForGroup(String newGroupId) {
-                selectedGroupId = newGroupId;
-                draftEntries
-                  ..clear()
-                  ..add(_DraftSetEntry(id: nextSelectionId()));
-                final MuscleGroup newGroup = groups.firstWhere(
-                  (group) => group.id == selectedGroupId,
-                );
-                if (newGroup.exercises.isNotEmpty) {
-                  setExerciseForEntry(
-                    draftEntries.first,
-                    newGroup.exercises.first.id,
-                  );
-                } else {
-                  setExerciseForEntry(draftEntries.first, null);
+              Exercise? resolveExercise(String? exerciseId) {
+                if (exerciseId == null) {
+                  return null;
                 }
-                validationError = null;
+                return exercisesById[exerciseId] ??
+                    provider.exerciseById(exerciseId);
               }
 
               List<Widget> metricFieldsFor(
@@ -193,6 +395,30 @@ class WorkoutScreen extends StatefulWidget {
                   );
                 }
 
+                Widget buildCommentField() {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: TextFormField(
+                      key: ValueKey('${draft.id}-comment-${exercise.id}'),
+                      initialValue: draft.comment,
+                      minLines: 1,
+                      maxLines: 3,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Comment (optional)',
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          draft.comment = value;
+                          validationError = null;
+                        });
+                      },
+                    ),
+                  );
+                }
+
                 Widget buildHalfRepsField() {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -215,30 +441,6 @@ class WorkoutScreen extends StatefulWidget {
                           });
                         },
                       ),
-                    ),
-                  );
-                }
-
-                Widget buildCommentField() {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: TextFormField(
-                      key: ValueKey('${draft.id}-comment-${exercise.id}'),
-                      initialValue: draft.comment,
-                      minLines: 1,
-                      maxLines: 3,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Comment (optional)',
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          draft.comment = value;
-                          validationError = null;
-                        });
-                      },
                     ),
                   );
                 }
@@ -362,218 +564,165 @@ class WorkoutScreen extends StatefulWidget {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         IconButton(
-                          onPressed: Navigator.of(context).pop,
+                          onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(Icons.close),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    if (validationError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Material(
-                          color: Theme.of(context).colorScheme.errorContainer,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onErrorContainer,
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Chip(label: Text(group.name)),
+                        if (currentExercise!.isSuperset)
+                          const Chip(label: Text('Superset')),
+                        if (currentExercise.isComplete)
+                          const Chip(label: Text('Completed')),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...drafts.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final draft = entry.value;
+                      final exercise = resolveExercise(draft.exerciseId);
+                      final bool canRemove = drafts.length > 1;
+                      final bool isMissingExercise =
+                          draft.exerciseId != null && exercise == null;
+                      return Card(
+                        key: ValueKey(draft.id),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      drafts.length > 1
+                                          ? 'Entry ${index + 1}'
+                                          : 'Entry',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleSmall,
+                                    ),
+                                  ),
+                                  if (canRemove)
+                                    IconButton(
+                                      tooltip: 'Remove',
+                                      onPressed: () {
+                                        setState(() {
+                                          drafts.remove(draft);
+                                          validationError = null;
+                                        });
+                                      },
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              InputDecorator(
+                                decoration: const InputDecoration(
+                                  labelText: 'Exercise',
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: draft.exerciseId,
+                                    isExpanded: true,
+                                    hint: const Text('Select exercise'),
+                                    items: exercises
+                                        .map(
+                                          (exercise) =>
+                                              DropdownMenuItem<String>(
+                                                value: exercise.id,
+                                                child: Text(exercise.name),
+                                              ),
+                                        )
+                                        .toList(),
+                                    onChanged: (selected) {
+                                      if (selected == null) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        draft.exerciseId = selected;
+                                        draft.reps = '';
+                                        draft.weight = '';
+                                        draft.distance = '';
+                                        draft.time = '';
+                                        draft.halfReps = '';
+                                        draft.comment = '';
+                                        validationError = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                              if (isMissingExercise)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
                                   child: Text(
-                                    validationError!,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
+                                    'This exercise is no longer available. Choose another to continue.',
+                                    style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
                                           color: Theme.of(
                                             context,
-                                          ).colorScheme.onErrorContainer,
+                                          ).colorScheme.error,
                                         ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              if (exercise != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text(
+                                        exercise.unit.label,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelLarge,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ...metricFieldsFor(exercise, draft),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      ),
-                    DropdownButtonFormField<String>(
-                      // ignore: deprecated_member_use
-                      value: selectedGroupId,
-                      decoration: const InputDecoration(
-                        labelText: 'Muscle group',
-                      ),
-                      items: groups
-                          .map(
-                            (group) => DropdownMenuItem<String>(
-                              value: group.id,
-                              child: Text(group.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null || value == selectedGroupId) {
-                          return;
-                        }
+                      );
+                    }),
+                    TextButton.icon(
+                      onPressed: () {
                         setState(() {
-                          resetDraftEntriesForGroup(value);
+                          final _DraftSetEntry newEntry = _DraftSetEntry(
+                            id: nextDraftId(),
+                          );
+                          if (drafts.isNotEmpty) {
+                            newEntry.exerciseId = drafts.last.exerciseId;
+                          } else if (exercises.isNotEmpty) {
+                            newEntry.exerciseId = exercises.first.id;
+                          }
+                          drafts.add(newEntry);
                         });
                       },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add another exercise entry'),
                     ),
-                    const SizedBox(height: 16),
-                    if (exercises.isEmpty)
-                      const Text(
-                        'No exercises in this muscle group yet. Add some from the library screen.',
-                      )
-                    else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Configure each exercise entry below. Add duplicates to capture drop sets or tempo changes.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 12),
-                          ...draftEntries.asMap().entries.map((entry) {
-                            final int index = entry.key;
-                            final _DraftSetEntry draft = entry.value;
-                            final Exercise? exercise = draft.exerciseId == null
-                                ? null
-                                : exercisesById[draft.exerciseId!];
-                            final bool hasMissingExercise =
-                                draft.exerciseId != null && exercise == null;
-                            final bool canRemove = draftEntries.length > 1;
-
-                            return Card(
-                              key: ValueKey('draft-${draft.id}'),
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            draftEntries.length > 1
-                                                ? 'Exercise ${index + 1}'
-                                                : 'Exercise',
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.titleSmall,
-                                          ),
-                                        ),
-                                        if (canRemove)
-                                          IconButton(
-                                            tooltip: 'Remove',
-                                            onPressed: () {
-                                              setState(() {
-                                                draftEntries.remove(draft);
-                                                validationError = null;
-                                              });
-                                            },
-                                            icon: const Icon(
-                                              Icons.remove_circle_outline,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    DropdownButtonFormField<String>(
-                                      initialValue: draft.exerciseId,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Exercise',
-                                      ),
-                                      items: exercises
-                                          .map(
-                                            (exercise) =>
-                                                DropdownMenuItem<String>(
-                                                  value: exercise.id,
-                                                  child: Text(exercise.name),
-                                                ),
-                                          )
-                                          .toList(),
-                                      onChanged: (selected) {
-                                        if (selected == null) {
-                                          return;
-                                        }
-                                        setState(() {
-                                          setExerciseForEntry(draft, selected);
-                                        });
-                                      },
-                                    ),
-                                    const SizedBox(height: 12),
-                                    if (hasMissingExercise)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Text(
-                                          'This exercise is no longer in this muscle group. Choose another to continue.',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.error,
-                                              ),
-                                        ),
-                                      ),
-                                    if (exercise != null)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Text(
-                                              exercise.unit.label,
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.labelLarge,
-                                            ),
-                                            const SizedBox(height: 8),
-                                            ...metricFieldsFor(exercise, draft),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                    if (validationError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          validationError!,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.error,
                               ),
-                            );
-                          }),
-                          TextButton.icon(
-                            onPressed: () {
-                              if (exercises.isEmpty) {
-                                return;
-                              }
-                              setState(() {
-                                final _DraftSetEntry newEntry = _DraftSetEntry(
-                                  id: nextSelectionId(),
-                                );
-                                final String initialExerciseId =
-                                    draftEntries.isNotEmpty
-                                    ? (draftEntries.last.exerciseId ??
-                                          exercises.first.id)
-                                    : exercises.first.id;
-                                setExerciseForEntry(
-                                  newEntry,
-                                  initialExerciseId,
-                                );
-                                draftEntries.add(newEntry);
-                              });
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Another Exercise'),
-                          ),
-                        ],
+                        ),
                       ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
@@ -616,7 +765,7 @@ class WorkoutScreen extends StatefulWidget {
                           return Duration(seconds: seconds);
                         }
 
-                        if (draftEntries.isEmpty) {
+                        if (drafts.isEmpty) {
                           showError('Add at least one exercise entry.');
                           return;
                         }
@@ -624,15 +773,13 @@ class WorkoutScreen extends StatefulWidget {
                         final List<WorkoutSetEntry> entries =
                             <WorkoutSetEntry>[];
 
-                        for (final draft in draftEntries) {
-                          final String? exerciseId = draft.exerciseId;
+                        for (final draft in drafts) {
+                          final exerciseId = draft.exerciseId;
                           if (exerciseId == null) {
                             showError('Select an exercise for each entry.');
                             return;
                           }
-                          final Exercise? exercise =
-                              exercisesById[exerciseId] ??
-                              provider.exerciseById(exerciseId);
+                          final exercise = resolveExercise(exerciseId);
                           if (exercise == null) {
                             showError('Selected exercise is unavailable.');
                             return;
@@ -660,7 +807,7 @@ class WorkoutScreen extends StatefulWidget {
                             }
                             if (!allowHalfReps) {
                               showError(
-                                'Half reps are only available for Weight & Reps, Reps, or Reps & Time exercises.',
+                                'Half reps are only valid for weight & reps, reps, or reps & time exercises.',
                               );
                               return;
                             }
@@ -743,16 +890,24 @@ class WorkoutScreen extends StatefulWidget {
                           );
                         }
 
-                        final bool success = isEditing
-                            ? provider.updateSet(
-                                setId: initialSet.id,
-                                muscleGroupId: selectedGroupId,
-                                entries: entries,
-                              )
-                            : provider.addSet(
-                                muscleGroupId: selectedGroupId,
-                                entries: entries,
-                              );
+                        final bool success;
+                        if (isEditing) {
+                          final updateId = existingSet?.id;
+                          if (updateId == null) {
+                            showError('Unable to update this set.');
+                            return;
+                          }
+                          success = provider.updateSetInExercise(
+                            exerciseLogId: currentExercise!.id,
+                            setId: updateId,
+                            entries: entries,
+                          );
+                        } else {
+                          success = provider.addSetToExercise(
+                            exerciseLogId: currentExercise!.id,
+                            entries: entries,
+                          );
+                        }
                         if (!success) {
                           showError(
                             isEditing
@@ -762,7 +917,7 @@ class WorkoutScreen extends StatefulWidget {
                           return;
                         }
 
-                        Navigator.of(rootContext).pop();
+                        Navigator.of(sheetContext).pop();
                         ScaffoldMessenger.of(rootContext).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -1132,62 +1287,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  'Workout',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (provider.isTimerActive)
-                    _TimerBadge(
-                      label: _formatClock(
-                        provider.timerRemaining ?? Duration.zero,
-                      ),
-                    ),
-                  IconButton(
-                    tooltip: provider.isTimerActive
-                        ? 'View timer'
-                        : 'Start timer',
-                    onPressed: () => _showTimerPopup(context),
-                    icon: Icon(
-                      provider.isTimerActive
-                          ? Icons.timer
-                          : Icons.timer_outlined,
-                    ),
-                  ),
-                  session == null
-                      ? FilledButton(
-                          onPressed: provider.muscleGroups.isEmpty
-                              ? null
-                              : () {
-                                  provider.startWorkout();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Workout started.'),
-                                    ),
-                                  );
-                                },
-                          child: const Text('Start'),
-                        )
-                      : FilledButton.icon(
-                          onPressed: () =>
-                              WorkoutScreen.showAddSetSheet(context),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Set'),
-                        ),
-                ],
-              ),
-            ],
-          ),
+          _buildHeader(context, provider, session),
           const SizedBox(height: 16),
           if (provider.muscleGroups.isEmpty)
             const Expanded(
@@ -1204,160 +1304,457 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             )
           else
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Active workout',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text('Started at ${_formatTime(session.startedAt)}'),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: session.sets.isEmpty
-                        ? const _EmptyState(
-                            message: 'Add your first set to log progress.',
-                          )
-                        : ReorderableListView.builder(
-                            buildDefaultDragHandles: false,
-                            itemCount: session.sets.length,
-                            onReorder: (oldIndex, newIndex) {
-                              final moved = provider.reorderActiveSet(
-                                oldIndex,
-                                newIndex,
-                              );
-                              if (!moved && mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Unable to reorder sets.'),
-                                  ),
-                                );
-                              }
-                            },
-                            itemBuilder: (context, index) {
-                              final set = session.sets[index];
-                              final group = groupsById[set.muscleGroupId];
-                              return ReorderableDelayedDragStartListener(
-                                key: ValueKey(set.id),
-                                index: index,
-                                child: Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Row(
-                                                children: [
-                                                  Text(
-                                                    'Set ${index + 1}',
-                                                    style: Theme.of(
-                                                      context,
-                                                    ).textTheme.titleMedium,
-                                                  ),
-                                                  if (set.isSuperset)
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            left: 8,
-                                                          ),
-                                                      child: const Chip(
-                                                        label: Text('Superset'),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Edit set',
-                                              onPressed: () =>
-                                                  WorkoutScreen.showAddSetSheet(
-                                                    context,
-                                                    initialSet: set,
-                                                  ),
-                                              icon: const Icon(Icons.edit),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Delete set',
-                                              onPressed: () {
-                                                final removed = provider
-                                                    .removeActiveSet(set.id);
-                                                if (!removed && mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Unable to delete set.',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                              icon: const Icon(
-                                                Icons.delete_outline,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        if (group != null) Text(group.name),
-                                        const SizedBox(height: 8),
-                                        Column(
-                                          children: set.entries.map((entry) {
-                                            final exercise =
-                                                provider.exerciseById(
-                                                  entry.exerciseId,
-                                                ) ??
-                                                Exercise(
-                                                  id: entry.exerciseId,
-                                                  name: 'Exercise',
-                                                  unit: ExerciseUnit.reps,
-                                                );
-                                            return _SetRow(
-                                              exercise: exercise,
-                                              entry: entry,
-                                            );
-                                          }).toList(),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () {
-                      provider.finishWorkout();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Workout saved.')),
-                      );
-                    },
-                    child: const Text('Finish Workout'),
-                  ),
-                ],
+              child: _buildActiveWorkoutBody(
+                context,
+                provider,
+                session,
+                groupsById,
               ),
             ),
         ],
       ),
     );
+  }
+
+  Widget _buildHeader(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutSession? session,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text('Workout', style: Theme.of(context).textTheme.titleLarge),
+        ),
+        const SizedBox(width: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (provider.isTimerActive)
+              _TimerBadge(
+                label: _formatClock(provider.timerRemaining ?? Duration.zero),
+              ),
+            IconButton(
+              tooltip: provider.isTimerActive ? 'View timer' : 'Start timer',
+              onPressed: () => _showTimerPopup(context),
+              icon: Icon(
+                provider.isTimerActive ? Icons.timer : Icons.timer_outlined,
+              ),
+            ),
+            if (session == null)
+              FilledButton(
+                onPressed: provider.muscleGroups.isEmpty
+                    ? null
+                    : () => _handleStartWorkout(context, provider),
+                child: const Text('Start Workout'),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActiveWorkoutBody(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutSession session,
+    Map<String, MuscleGroup> groupsById,
+  ) {
+    final exercises = session.exercises;
+    final activeExercise = provider.activeExercise;
+    final hasLoggedSets = exercises.any((exercise) => exercise.sets.isNotEmpty);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Active workout',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text('Started at ${_formatTime(session.startedAt)}'),
+                if (activeExercise != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Logging: ${_exerciseNamesFor(activeExercise, provider).join(', ')}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                activeExercise == null
+                    ? 'Add an exercise to begin logging sets.'
+                    : 'Add sets or finish the active exercise below.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: activeExercise == null
+                  ? () => WorkoutScreen.showStartExerciseSheet(context)
+                  : () => WorkoutScreen.showAddSetSheet(
+                      context,
+                      exerciseLog: activeExercise,
+                    ),
+              icon: Icon(
+                activeExercise == null ? Icons.playlist_add : Icons.add,
+              ),
+              label: Text(activeExercise == null ? 'Add Exercise' : 'Add Set'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: exercises.isEmpty
+              ? const _EmptyState(message: 'Add an exercise to log sets.')
+              : ListView.separated(
+                  itemCount: exercises.length,
+                  separatorBuilder: (_, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final log = exercises[index];
+                    return _buildExerciseCard(
+                      context,
+                      provider,
+                      log,
+                      groupsById,
+                    );
+                  },
+                ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: hasLoggedSets
+              ? () => _handleFinishWorkout(context, provider)
+              : null,
+          child: const Text('Finish Workout'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExerciseCard(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutExerciseLog log,
+    Map<String, MuscleGroup> groupsById,
+  ) {
+    final muscleGroup = groupsById[log.muscleGroupId];
+    final exerciseNames = _exerciseNamesFor(log, provider);
+    final isActive = provider.activeExercise?.id == log.id && !log.isComplete;
+    final hasSets = log.sets.isNotEmpty;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        muscleGroup?.name ?? 'Exercise',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: exerciseNames
+                            .map((name) => Chip(label: Text(name)))
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (log.isSuperset) const Chip(label: Text('Superset')),
+                    if (log.isComplete)
+                      const Chip(label: Text('Completed'))
+                    else if (isActive)
+                      const Chip(label: Text('Active')),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildSetsList(context, provider, log),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                if (!log.isComplete)
+                  FilledButton.icon(
+                    onPressed: () => WorkoutScreen.showAddSetSheet(
+                      context,
+                      exerciseLog: log,
+                    ),
+                    icon: const Icon(Icons.fitness_center),
+                    label: const Text('Add Set'),
+                  ),
+                if (!log.isComplete && hasSets)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _handleFinishExercise(context, provider, log),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Finish Exercise'),
+                  ),
+                if (!log.isComplete && !hasSets)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _handleCancelExercise(context, provider, log),
+                    icon: const Icon(Icons.close),
+                    label: const Text('Cancel Exercise'),
+                  ),
+                if (log.isComplete)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _handleReopenExercise(context, provider, log),
+                    icon: const Icon(Icons.replay),
+                    label: const Text('Reopen'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSetsList(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutExerciseLog log,
+  ) {
+    if (log.sets.isEmpty) {
+      return const Text('No sets logged yet.');
+    }
+
+    return ReorderableListView.builder(
+      key: ValueKey('sets-${log.id}'),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      itemCount: log.sets.length,
+      onReorder: (oldIndex, newIndex) {
+        final moved = provider.reorderSetsInExercise(
+          exerciseLogId: log.id,
+          oldIndex: oldIndex,
+          newIndex: newIndex,
+        );
+        if (!moved && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unable to reorder sets.')),
+          );
+        }
+      },
+      itemBuilder: (context, index) {
+        final set = log.sets[index];
+        return ReorderableDelayedDragStartListener(
+          key: ValueKey(set.id),
+          index: index,
+          child: Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Set ${index + 1} · ${_formatSetTimestamp(set.timestamp)}',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      // Check if this set is a PR
+                      if (set.entries.length == 1 && set.entries.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            final isPR = provider.isPersonalRecord(set.entries.first, set);
+                            if (isPR) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Icon(
+                                  Icons.emoji_events,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      IconButton(
+                        tooltip: 'Edit set',
+                        onPressed: () => WorkoutScreen.showAddSetSheet(
+                          context,
+                          exerciseLog: log,
+                          initialSet: set,
+                        ),
+                        icon: const Icon(Icons.edit),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete set',
+                        onPressed: () =>
+                            _handleRemoveSet(context, provider, log, set),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Column(
+                    children: set.entries.map((entry) {
+                      final exercise =
+                          provider.exerciseById(entry.exerciseId) ??
+                          Exercise(
+                            id: entry.exerciseId,
+                            name: 'Exercise',
+                            unit: entry.unit,
+                          );
+                      return _SetRow(
+                        exercise: exercise,
+                        entry: entry,
+                        isSuperset: set.entries.length > 1,
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<String> _exerciseNamesFor(
+    WorkoutExerciseLog log,
+    GymLogProvider provider,
+  ) {
+    final ids = <String>{...log.exerciseIds};
+    for (final set in log.sets) {
+      for (final entry in set.entries) {
+        ids.add(entry.exerciseId);
+      }
+    }
+    final names = <String>[];
+    for (final id in ids) {
+      final exercise = provider.exerciseById(id);
+      if (exercise != null) {
+        names.add(exercise.name);
+      }
+    }
+    names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return names;
+  }
+
+  void _handleStartWorkout(BuildContext context, GymLogProvider provider) {
+    provider.startWorkout();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Workout started.')));
+  }
+
+  void _handleFinishWorkout(BuildContext context, GymLogProvider provider) {
+    provider.finishWorkout();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Workout saved.')));
+  }
+
+  void _handleFinishExercise(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutExerciseLog log,
+  ) {
+    final success = provider.completeExercise(log.id);
+    _showSnackBar(
+      context,
+      success ? 'Exercise finished.' : 'Unable to finish this exercise.',
+    );
+  }
+
+  void _handleCancelExercise(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutExerciseLog log,
+  ) {
+    final success = provider.cancelExercise(log.id);
+    _showSnackBar(
+      context,
+      success ? 'Exercise cancelled.' : 'Unable to cancel this exercise.',
+    );
+  }
+
+  void _handleReopenExercise(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutExerciseLog log,
+  ) {
+    final success = provider.reopenExercise(log.id);
+    _showSnackBar(
+      context,
+      success ? 'Exercise reopened.' : 'Unable to reopen this exercise.',
+    );
+  }
+
+  void _handleRemoveSet(
+    BuildContext context,
+    GymLogProvider provider,
+    WorkoutExerciseLog log,
+    WorkoutSet set,
+  ) {
+    final success = provider.removeSetFromExercise(
+      exerciseLogId: log.id,
+      setId: set.id,
+    );
+    _showSnackBar(
+      context,
+      success ? 'Set removed.' : 'Unable to remove this set.',
+    );
+  }
+
+  String _formatSetTimestamp(DateTime timestamp) => _formatTime(timestamp);
+
+  void _showSnackBar(BuildContext context, String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -1584,10 +1981,15 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _SetRow extends StatelessWidget {
-  const _SetRow({required this.exercise, required this.entry});
+  const _SetRow({
+    required this.exercise,
+    required this.entry,
+    this.isSuperset = false,
+  });
 
   final Exercise exercise;
   final WorkoutSetEntry entry;
+  final bool isSuperset;
 
   @override
   Widget build(BuildContext context) {
@@ -1618,47 +2020,50 @@ class _SetRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Flexible(
-            fit: FlexFit.loose,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    exercise.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      child: SizedBox(
+        height: 24,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (isSuperset)
+              SizedBox(
+                width: 100,
+                child: Text(
+                  exercise.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (hasComment)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: IconButton(
-                        tooltip: 'View comment',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minHeight: 28,
-                          minWidth: 28,
-                        ),
-                        splashRadius: 18,
-                        iconSize: 18,
-                        onPressed: showCommentDialog,
-                        icon: const Icon(Icons.chat_bubble_outline),
-                      ),
-                    ),
+              )
+            else
+              Flexible(
+                fit: FlexFit.loose,
+                child: Text(
+                  exercise.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            const SizedBox(width: 12),
+            Expanded(child: ScrollableMetricsText(text: metrics)),
+            if (hasComment)
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: IconButton(
+                  tooltip: 'View comment',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minHeight: 28,
+                    minWidth: 28,
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: ScrollableMetricsText(text: metrics)),
-        ],
+                  splashRadius: 18,
+                  iconSize: 18,
+                  onPressed: showCommentDialog,
+                  icon: const Icon(Icons.chat_bubble_outline),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

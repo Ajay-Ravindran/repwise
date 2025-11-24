@@ -298,9 +298,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   ) {
     final Set<String> names = <String>{};
     for (final session in sessions) {
-      for (final set in session.sets) {
-        final MuscleGroup? group = provider.muscleGroupById(set.muscleGroupId);
-        if (group != null) {
+      for (final exercise in session.exercises) {
+        final MuscleGroup? group = provider.muscleGroupById(
+          exercise.muscleGroupId,
+        );
+        if (group != null && exercise.hasSets) {
           names.add(group.name);
         }
       }
@@ -344,7 +346,16 @@ class _SelectedDaySummary extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: muscleGroupNames
-                    .map((name) => Chip(label: Text(name)))
+                    .map(
+                      (name) => Chip(
+                        avatar: CircleAvatar(
+                          backgroundColor: _HistoryScreenState._colorForName(
+                            name,
+                          ),
+                        ),
+                        label: Text(name),
+                      ),
+                    )
                     .toList(),
               ),
           ],
@@ -404,12 +415,20 @@ class _SessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupsById = <String, MuscleGroup?>{};
-    for (final set in session.sets) {
-      groupsById[set.muscleGroupId] = provider.muscleGroupById(
-        set.muscleGroupId,
-      );
-    }
+    final groupsById = <String, MuscleGroup?>{
+      for (final exercise in session.exercises)
+        exercise.muscleGroupId: provider.muscleGroupById(
+          exercise.muscleGroupId,
+        ),
+    };
+    final totalSets = session.exercises.fold<int>(
+      0,
+      (sum, exercise) => sum + exercise.sets.length,
+    );
+    final completedExercises = session.exercises
+        .where((exercise) => exercise.hasSets)
+        .toList(growable: false);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -425,41 +444,23 @@ class _SessionCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${session.sets.length} set${session.sets.length == 1 ? '' : 's'}',
+                  '$totalSets set${totalSets == 1 ? '' : 's'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 IconButton(
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'Workout options',
-                  onPressed: session.sets.isEmpty
+                  onPressed: totalSets == 0
                       ? null
                       : () => _showSetOptions(context),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: groupsById.values
-                  .whereType<MuscleGroup>()
-                  .map(
-                    (group) => Chip(
-                      avatar: CircleAvatar(
-                        backgroundColor: paletteResolver(group.name),
-                      ),
-                      label: Text(group.name),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            Column(
-              children: [
-                for (final set in session.sets)
-                  _WorkoutSetTile(set: set, provider: provider),
-              ],
-            ),
+            if (completedExercises.isEmpty)
+              const Text('No sets logged for this workout.')
+            else
+              ..._buildExercisesList(context, completedExercises, groupsById),
           ],
         ),
       ),
@@ -473,7 +474,73 @@ class _SessionCard extends StatelessWidget {
     return '$hour:$minute $suffix';
   }
 
+  List<Widget> _buildExercisesList(
+    BuildContext context,
+    List<WorkoutExerciseLog> exercises,
+    Map<String, MuscleGroup?> groupsById,
+  ) {
+    final widgets = <Widget>[];
+    String? lastMuscleGroupId;
+
+    for (var i = 0; i < exercises.length; i++) {
+      final log = exercises[i];
+      final muscleGroup = groupsById[log.muscleGroupId];
+
+      // Add muscle group header if it's different from the last one
+      if (log.muscleGroupId != lastMuscleGroupId) {
+        if (lastMuscleGroupId != null) {
+          widgets.add(const SizedBox(height: 16));
+        }
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: muscleGroup != null
+                        ? paletteResolver(muscleGroup.name)
+                        : Colors.grey,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Text(
+                  muscleGroup?.name ?? 'Exercise',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        lastMuscleGroupId = log.muscleGroupId;
+      }
+
+      widgets.add(
+        _ExerciseHistorySection(
+          log: log,
+          provider: provider,
+          showMuscleGroup: false,
+        ),
+      );
+
+      if (i < exercises.length - 1) {
+        widgets.add(const SizedBox(height: 12));
+      }
+    }
+
+    return widgets;
+  }
+
   void _showSetOptions(BuildContext context) {
+    final setRefs = _completedSetReferences();
+    if (setRefs.isEmpty) {
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -493,10 +560,10 @@ class _SessionCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...session.sets.asMap().entries.map((entry) {
+                ...setRefs.asMap().entries.map((entry) {
                   final index = entry.key;
-                  final set = entry.value;
-                  final summary = _setSummary(set);
+                  final reference = entry.value;
+                  final summary = _setSummary(reference.set);
                   return ListTile(
                     leading: CircleAvatar(
                       radius: 16,
@@ -507,7 +574,7 @@ class _SessionCard extends StatelessWidget {
                     trailing: const Icon(Icons.delete_outline),
                     onTap: () {
                       Navigator.of(sheetContext).pop();
-                      _confirmDeleteSet(context, set);
+                      _confirmDeleteSet(context, reference);
                     },
                   );
                 }),
@@ -538,7 +605,10 @@ class _SessionCard extends StatelessWidget {
     return '${names.take(2).join(', ')}${names.length > 2 ? '…' : ''}';
   }
 
-  Future<void> _confirmDeleteSet(BuildContext context, WorkoutSet set) async {
+  Future<void> _confirmDeleteSet(
+    BuildContext context,
+    _CompletedSetReference reference,
+  ) async {
     final theme = Theme.of(context);
     final shouldDelete = await showDialog<bool>(
       context: context,
@@ -567,7 +637,8 @@ class _SessionCard extends StatelessWidget {
     }
     final removed = provider.removeCompletedSet(
       sessionId: session.id,
-      setId: set.id,
+      exerciseLogId: reference.exercise.id,
+      setId: reference.set.id,
     );
     if (!removed && context.mounted) {
       ScaffoldMessenger.of(
@@ -575,23 +646,115 @@ class _SessionCard extends StatelessWidget {
       ).showSnackBar(const SnackBar(content: Text('Unable to delete set.')));
     }
   }
+
+  List<_CompletedSetReference> _completedSetReferences() {
+    final refs = <_CompletedSetReference>[];
+    for (final exercise in session.exercises) {
+      for (final set in exercise.sets) {
+        refs.add(_CompletedSetReference(exercise: exercise, set: set));
+      }
+    }
+    refs.sort((a, b) => a.set.timestamp.compareTo(b.set.timestamp));
+    return refs;
+  }
+}
+
+class _ExerciseHistorySection extends StatelessWidget {
+  const _ExerciseHistorySection({
+    required this.log,
+    required this.provider,
+    this.showMuscleGroup = true,
+  });
+
+  final WorkoutExerciseLog log;
+  final GymLogProvider provider;
+  final bool showMuscleGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    final exerciseNames = _exerciseNames();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!log.isSuperset) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    ...exerciseNames.map((name) => Chip(label: Text(name))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (log.isSuperset) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Chip(label: Text('Superset')),
+          ),
+        ],
+        if (log.sets.isEmpty)
+          const Text('No sets logged for this exercise.')
+        else
+          Column(
+            children: [
+              for (var i = 0; i < log.sets.length; i++)
+                _WorkoutSetTile(
+                  set: log.sets[i],
+                  setNumber: i + 1,
+                  provider: provider,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  List<String> _exerciseNames() {
+    final ids = <String>{...log.exerciseIds};
+    for (final set in log.sets) {
+      for (final entry in set.entries) {
+        ids.add(entry.exerciseId);
+      }
+    }
+    final names = ids
+        .map((id) => provider.exerciseById(id)?.name ?? 'Exercise')
+        .toList(growable: false);
+    names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return names;
+  }
+}
+
+class _CompletedSetReference {
+  const _CompletedSetReference({required this.exercise, required this.set});
+
+  final WorkoutExerciseLog exercise;
+  final WorkoutSet set;
 }
 
 class _WorkoutSetTile extends StatelessWidget {
-  const _WorkoutSetTile({required this.set, required this.provider});
+  const _WorkoutSetTile({
+    required this.set,
+    required this.setNumber,
+    required this.provider,
+  });
 
   final WorkoutSet set;
+  final int setNumber;
   final GymLogProvider provider;
 
   @override
   Widget build(BuildContext context) {
     final MuscleGroup? group = provider.muscleGroupById(set.muscleGroupId);
     final theme = Theme.of(context);
-    final baseSurface = theme.colorScheme.surfaceContainerHighest;
-    final double tintAlpha = theme.brightness == Brightness.dark ? 0.35 : 0.6;
-    final Color surfaceTint = baseSurface.withValues(alpha: tintAlpha);
 
-    final List<Widget> entryWidgets = <Widget>[];
     void showCommentDialog(String exerciseName, String comment) {
       final trimmed = comment.trim();
       if (trimmed.isEmpty) {
@@ -614,6 +777,15 @@ class _WorkoutSetTile extends StatelessWidget {
       );
     }
 
+    // Build entry widgets based on whether it's a superset or single exercise
+    final List<Widget> entryWidgets = <Widget>[];
+
+    // Check if this set holds any current PRs (only for single-exercise sets)
+    final currentPRs = set.entries.length == 1 && set.entries.isNotEmpty
+        ? provider.getCurrentPRs(set.entries.first.exerciseId)
+        : <String>{};
+    final isPRSet = currentPRs.contains(set.id);
+
     for (var i = 0; i < set.entries.length; i++) {
       final entry = set.entries[i];
       final exercise =
@@ -632,57 +804,81 @@ class _WorkoutSetTile extends StatelessWidget {
             unit: ExerciseUnit.reps,
           );
       final hasComment = (entry.comment?.trim().isNotEmpty ?? false);
+      final metrics = formatWorkoutEntry(entry);
 
-      entryWidgets.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Flexible(
-              fit: FlexFit.loose,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      exercise.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+      // For superset, show exercise name with metrics in aligned columns
+      if (set.entries.length > 1) {
+        entryWidgets.add(
+          SizedBox(
+            height: 24,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 100,
+                  child: Text(
+                    exercise.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: ScrollableMetricsText(text: metrics)),
+                if (hasComment)
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      tooltip: 'View comment',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minHeight: 28,
+                        minWidth: 28,
+                      ),
+                      splashRadius: 18,
+                      iconSize: 18,
+                      onPressed: () =>
+                          showCommentDialog(exercise.name, entry.comment!),
+                      icon: const Icon(Icons.chat_bubble_outline),
                     ),
                   ),
-                  if (hasComment)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: IconButton(
-                          tooltip: 'View comment',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minHeight: 28,
-                            minWidth: 28,
-                          ),
-                          splashRadius: 18,
-                          iconSize: 18,
-                          onPressed: () =>
-                              showCommentDialog(exercise.name, entry.comment!),
-                          icon: const Icon(Icons.chat_bubble_outline),
-                        ),
+              ],
+            ),
+          ),
+        );
+      } else {
+        // For single exercise, just show metrics with comment icon aligned
+        entryWidgets.add(
+          SizedBox(
+            height: 24,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: ScrollableMetricsText(text: metrics)),
+                if (hasComment)
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      tooltip: 'View comment',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minHeight: 28,
+                        minWidth: 28,
                       ),
+                      splashRadius: 18,
+                      iconSize: 18,
+                      onPressed: () =>
+                          showCommentDialog(exercise.name, entry.comment!),
+                      icon: const Icon(Icons.chat_bubble_outline),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ScrollableMetricsText(
-                text: formatWorkoutEntry(entry),
-                backgroundColor: surfaceTint,
-              ),
-            ),
-          ],
-        ),
-      );
+          ),
+        );
+      }
 
       if (i < set.entries.length - 1) {
         entryWidgets.add(const SizedBox(height: 6));
@@ -690,25 +886,45 @@ class _WorkoutSetTile extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: surfaceTint,
-        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(color: theme.colorScheme.outlineVariant, width: 2),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (set.isSuperset)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: const Chip(label: Text('Superset')),
-                ),
+            SizedBox(
+              width: 60,
+              child: Row(
+                children: [
+                  Text(
+                    'Set $setNumber',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (isPRSet)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(
+                        Icons.emoji_events,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                ],
               ),
-            ...entryWidgets,
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: entryWidgets,
+              ),
+            ),
           ],
         ),
       ),

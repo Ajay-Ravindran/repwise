@@ -106,28 +106,120 @@ class WorkoutSet {
   }
 }
 
+class WorkoutExerciseLog {
+  WorkoutExerciseLog({
+    required this.id,
+    required this.muscleGroupId,
+    required List<String> exerciseIds,
+    List<WorkoutSet>? sets,
+    DateTime? startedAt,
+    this.finishedAt,
+  }) : exerciseIds = Set<String>.from(exerciseIds).toList(),
+       sets = sets ?? <WorkoutSet>[],
+       startedAt = startedAt ?? DateTime.now();
+
+  final String id;
+  final String muscleGroupId;
+  final List<String> exerciseIds;
+  final List<WorkoutSet> sets;
+  final DateTime startedAt;
+  DateTime? finishedAt;
+
+  bool get hasSets => sets.isNotEmpty;
+  bool get isSuperset => exerciseIds.length > 1;
+  bool get isComplete => finishedAt != null;
+
+  factory WorkoutExerciseLog.fromJson(Map<String, dynamic> json) {
+    final setsJson = json['sets'] as List<dynamic>? ?? const [];
+    final parsedSets = setsJson
+        .whereType<Map<String, dynamic>>()
+        .map(WorkoutSet.fromJson)
+        .toList();
+    final rawIds = json['exerciseIds'];
+    final parsedIds = rawIds is List
+        ? Set<String>.from(rawIds.whereType<String>()).toList()
+        : <String>[];
+    final inferredIds = parsedIds.isEmpty
+        ? parsedSets
+              .expand((set) => set.entries.map((entry) => entry.exerciseId))
+              .toSet()
+              .toList()
+        : parsedIds;
+    return WorkoutExerciseLog(
+      id: json['id'] as String,
+      muscleGroupId: json['muscleGroupId'] as String,
+      exerciseIds: inferredIds,
+      sets: parsedSets,
+      startedAt:
+          DateTime.tryParse(json['startedAt'] as String? ?? '') ??
+          (parsedSets.isNotEmpty ? parsedSets.first.timestamp : DateTime.now()),
+      finishedAt: DateTime.tryParse(json['finishedAt'] as String? ?? ''),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'muscleGroupId': muscleGroupId,
+      'exerciseIds': exerciseIds,
+      'startedAt': startedAt.toIso8601String(),
+      'finishedAt': finishedAt?.toIso8601String(),
+      'sets': sets.map((set) => set.toJson()).toList(),
+    };
+  }
+}
+
 class WorkoutSession {
   WorkoutSession({
     required this.id,
     required this.startedAt,
-    List<WorkoutSet>? sets,
-  }) : sets = sets ?? <WorkoutSet>[];
+    List<WorkoutExerciseLog>? exercises,
+  }) : exercises = exercises ?? <WorkoutExerciseLog>[];
 
   final String id;
   final DateTime startedAt;
-  final List<WorkoutSet> sets;
+  final List<WorkoutExerciseLog> exercises;
+
+  @Deprecated('Use exercises or allSets instead.')
+  List<WorkoutSet> get sets => List<WorkoutSet>.unmodifiable(allSets);
+
+  Iterable<WorkoutSet> get allSets =>
+      exercises.expand((exercise) => exercise.sets);
 
   factory WorkoutSession.fromJson(Map<String, dynamic> json) {
-    final setsJson = json['sets'] as List<dynamic>? ?? const [];
+    final exercisesJson = json['exercises'] as List<dynamic>?;
+    List<WorkoutExerciseLog> parsedExercises;
+    if (exercisesJson != null) {
+      parsedExercises = exercisesJson
+          .whereType<Map<String, dynamic>>()
+          .map(WorkoutExerciseLog.fromJson)
+          .toList();
+    } else {
+      final legacySetsJson = json['sets'] as List<dynamic>? ?? const [];
+      parsedExercises = legacySetsJson
+          .whereType<Map<String, dynamic>>()
+          .map(WorkoutSet.fromJson)
+          .map(
+            (set) => WorkoutExerciseLog(
+              id: set.id,
+              muscleGroupId: set.muscleGroupId,
+              exerciseIds: set.entries
+                  .map((entry) => entry.exerciseId)
+                  .toSet()
+                  .toList(),
+              sets: <WorkoutSet>[set],
+              startedAt: set.timestamp,
+              finishedAt: set.timestamp,
+            ),
+          )
+          .toList();
+    }
     return WorkoutSession(
       id: json['id'] as String,
       startedAt:
           DateTime.tryParse(json['startedAt'] as String? ?? '') ??
           DateTime.now(),
-      sets: setsJson
-          .whereType<Map<String, dynamic>>()
-          .map(WorkoutSet.fromJson)
-          .toList(),
+      exercises: parsedExercises,
     );
   }
 
@@ -135,7 +227,7 @@ class WorkoutSession {
     return <String, dynamic>{
       'id': id,
       'startedAt': startedAt.toIso8601String(),
-      'sets': sets.map((set) => set.toJson()).toList(),
+      'exercises': exercises.map((exercise) => exercise.toJson()).toList(),
     };
   }
 }
