@@ -637,33 +637,44 @@ class _WorkoutSetTile extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
+            Flexible(
+              fit: FlexFit.loose,
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(child: Text(exercise.name)),
+                  Flexible(
+                    child: Text(
+                      exercise.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   if (hasComment)
-                    SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: IconButton(
-                        tooltip: 'View comment',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minHeight: 28,
-                          minWidth: 28,
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: IconButton(
+                          tooltip: 'View comment',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minHeight: 28,
+                            minWidth: 28,
+                          ),
+                          splashRadius: 18,
+                          iconSize: 18,
+                          onPressed: () =>
+                              showCommentDialog(exercise.name, entry.comment!),
+                          icon: const Icon(Icons.chat_bubble_outline),
                         ),
-                        splashRadius: 18,
-                        iconSize: 18,
-                        onPressed: () =>
-                            showCommentDialog(exercise.name, entry.comment!),
-                        icon: const Icon(Icons.chat_bubble_outline),
                       ),
                     ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            Flexible(
+            Expanded(
               child: ScrollableMetricsText(
                 text: formatWorkoutEntry(entry),
                 backgroundColor: surfaceTint,
