@@ -1596,7 +1596,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       if (set.entries.length == 1 && set.entries.isNotEmpty)
                         Builder(
                           builder: (context) {
-                            final isPR = provider.isPersonalRecord(set.entries.first, set);
+                            final isPR = provider.isPersonalRecord(
+                              set.entries.first,
+                              set,
+                            );
                             if (isPR) {
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),

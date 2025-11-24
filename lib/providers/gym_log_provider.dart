@@ -851,35 +851,60 @@ class GymLogProvider extends ChangeNotifier {
         // Check if current set has higher weight or reps than all previous
         final hasWeightPR = currentWeight > maxWeight;
         final hasRepsPR = currentReps > maxReps;
+        final tiedWeight = currentWeight == maxWeight;
+        final tiedReps = currentReps == maxReps;
 
-        if (!hasWeightPR && !hasRepsPR) {
+        if (!hasWeightPR && !hasRepsPR && !tiedWeight && !tiedReps) {
           return false;
         }
 
-        // If it has a PR, check if it's the first set with this value in the active session
-        if (hasWeightPR && currentWeight >= maxWeight) {
-          // Check if any earlier set in active session has same weight
+        // Special handling for weight PRs (including ties)
+        if (hasWeightPR || tiedWeight) {
+          // Find if there's an earlier set in active session with same weight
+          int? earlierSetReps;
           for (final record in allEntries) {
-            if (record.set.id == currentSet.id) break;
             if (_activeSession != null &&
                 _isSetInSession(record.set, _activeSession!)) {
-              final prevWeight = record.entry.weight ?? 0;
-              if (prevWeight == currentWeight) {
-                return false; // Earlier set has same weight
+              // Check if this set is earlier than current set (by timestamp)
+              if (record.set.timestamp.isBefore(currentSet.timestamp)) {
+                final prevWeight = record.entry.weight ?? 0;
+                if (prevWeight == currentWeight) {
+                  earlierSetReps = record.entry.reps ?? 0;
+                  break;
+                }
               }
+            }
+          }
+
+          if (earlierSetReps != null) {
+            // Another set in active session has same weight
+            // Only this set is PR if it has more reps
+            if (currentReps <= earlierSetReps) {
+              return false;
+            }
+          } else if (tiedWeight && !hasWeightPR) {
+            // Weight ties with completed session but is not a new high
+            // If reps also tie or are lower, and no earlier set in active session, this is the first with this combo
+            // If reps are higher, it's a reps PR
+            if (!hasRepsPR && !tiedReps) {
+              return false;
             }
           }
         }
 
-        if (hasRepsPR && currentReps >= maxReps) {
-          // Check if any earlier set in active session has same reps
+        // Special handling for reps PRs (including ties)
+        if (hasRepsPR || (tiedReps && !hasWeightPR && !tiedWeight)) {
+          // Find if there's an earlier set in active session with same reps
           for (final record in allEntries) {
-            if (record.set.id == currentSet.id) break;
             if (_activeSession != null &&
                 _isSetInSession(record.set, _activeSession!)) {
-              final prevReps = record.entry.reps ?? 0;
-              if (prevReps == currentReps) {
-                return false; // Earlier set has same reps
+              // Check if this set is earlier than current set (by timestamp)
+              if (record.set.timestamp.isBefore(currentSet.timestamp)) {
+                final prevReps = record.entry.reps ?? 0;
+                final prevWeight = record.entry.weight ?? 0;
+                if (prevReps == currentReps && prevWeight >= currentWeight) {
+                  return false; // Earlier set has same or better metrics
+                }
               }
             }
           }
