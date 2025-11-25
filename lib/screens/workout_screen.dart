@@ -78,10 +78,24 @@ class WorkoutScreen extends StatefulWidget {
       return;
     }
 
-    var selectedGroupId = groups.first.id;
-    final Set<String> selectedExerciseIds = <String>{
-      if (groups.first.exercises.isNotEmpty) groups.first.exercises.first.id,
-    };
+    // Determine default muscle group based on previous exercise
+    String selectedGroupId;
+    if (session.exercises.isNotEmpty) {
+      // Use the muscle group from the last exercise
+      final lastExerciseMuscleGroupId = session.exercises.last.muscleGroupId;
+      // Verify this muscle group still exists and has exercises
+      if (groups.any((group) => group.id == lastExerciseMuscleGroupId)) {
+        selectedGroupId = lastExerciseMuscleGroupId;
+      } else {
+        selectedGroupId = groups.first.id;
+      }
+    } else {
+      // First exercise - use the first muscle group
+      selectedGroupId = groups.first.id;
+    }
+
+    // No exercises selected by default
+    final Set<String> selectedExerciseIds = <String>{};
 
     await showModalBottomSheet<void>(
       context: rootContext,
@@ -147,17 +161,8 @@ class WorkoutScreen extends StatefulWidget {
                             }
                             setState(() {
                               selectedGroupId = value;
-                              selectedExerciseIds
-                                ..clear()
-                                ..addAll(
-                                  groups
-                                      .firstWhere(
-                                        (group) => group.id == selectedGroupId,
-                                      )
-                                      .exercises
-                                      .map((exercise) => exercise.id)
-                                      .take(1),
-                                );
+                              // Clear exercise selection when changing muscle groups
+                              selectedExerciseIds.clear();
                             });
                           },
                         ),

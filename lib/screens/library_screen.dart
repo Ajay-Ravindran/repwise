@@ -292,9 +292,113 @@ class _SettingsSection extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            _AutoFinishWorkoutSetting(provider: provider),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AutoFinishWorkoutSetting extends StatefulWidget {
+  const _AutoFinishWorkoutSetting({required this.provider});
+
+  final GymLogProvider provider;
+
+  @override
+  State<_AutoFinishWorkoutSetting> createState() =>
+      _AutoFinishWorkoutSettingState();
+}
+
+class _AutoFinishWorkoutSettingState extends State<_AutoFinishWorkoutSetting> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.provider.autoFinishWorkoutHours.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_AutoFinishWorkoutSetting oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.provider.autoFinishWorkoutHours.toString() != _controller.text) {
+      _controller.text = widget.provider.autoFinishWorkoutHours.toString();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.provider.autoFinishWorkoutEnabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Auto-finish workout',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            Switch(
+              value: enabled,
+              onChanged: widget.provider.setAutoFinishWorkoutEnabled,
+            ),
+          ],
+        ),
+        if (enabled) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Finish after',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                SizedBox(
+                  width: 80,
+                  child: TextField(
+                    controller: _controller,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    enabled: enabled,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      final hours = int.tryParse(value);
+                      if (hours != null && hours >= 1) {
+                        widget.provider.setAutoFinishWorkoutHours(hours);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('hours', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

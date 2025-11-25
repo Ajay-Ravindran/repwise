@@ -810,25 +810,23 @@ class _WorkoutSetTile extends StatelessWidget {
         distanceUnit: provider.distanceUnit,
       );
 
-      // For superset, show exercise name with metrics in aligned columns
+      // For superset, show exercise name on left and metrics on right
       if (set.entries.length > 1) {
         entryWidgets.add(
-          SizedBox(
-            height: 24,
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: 100,
+                Expanded(
                   child: Text(
                     exercise.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: ScrollableMetricsText(text: metrics)),
+                Flexible(child: ScrollableMetricsText(text: metrics)),
                 if (hasComment)
                   SizedBox(
                     width: 28,
@@ -889,6 +887,48 @@ class _WorkoutSetTile extends StatelessWidget {
       }
     }
 
+    // For superset, use a different layout with set number on its own line
+    if (set.entries.length > 1) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: theme.colorScheme.outlineVariant, width: 2),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Set $setNumber',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (isPRSet)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(
+                        Icons.emoji_events,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...entryWidgets,
+            ],
+          ),
+        ),
+      );
+    }
+
+    // For single exercise, keep the original horizontal layout
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(

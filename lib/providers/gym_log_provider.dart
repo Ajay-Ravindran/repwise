@@ -34,6 +34,8 @@ class GymLogProvider extends ChangeNotifier {
   String _distanceUnit = 'km'; // 'km' or 'mi'
   bool _halfRepsEnabled = false;
   bool _commentsEnabled = true;
+  bool _autoFinishWorkoutEnabled = false;
+  int _autoFinishWorkoutHours = 4;
 
   List<MuscleGroup> get muscleGroups =>
       List<MuscleGroup>.unmodifiable(_muscleGroups);
@@ -79,6 +81,8 @@ class GymLogProvider extends ChangeNotifier {
   String get distanceUnit => _distanceUnit;
   bool get halfRepsEnabled => _halfRepsEnabled;
   bool get commentsEnabled => _commentsEnabled;
+  bool get autoFinishWorkoutEnabled => _autoFinishWorkoutEnabled;
+  int get autoFinishWorkoutHours => _autoFinishWorkoutHours;
 
   Map<DateTime, List<WorkoutSession>> get completedSessionsByDate {
     final Map<DateTime, List<WorkoutSession>> grouped =
@@ -108,6 +112,7 @@ class GymLogProvider extends ChangeNotifier {
       _resetTimerState();
     }
     _initialized = true;
+    _checkAndAutoFinishOldWorkout();
     notifyListeners();
   }
 
@@ -170,6 +175,9 @@ class GymLogProvider extends ChangeNotifier {
       _distanceUnit = settings['distanceUnit'] as String? ?? 'km';
       _halfRepsEnabled = settings['halfRepsEnabled'] as bool? ?? false;
       _commentsEnabled = settings['commentsEnabled'] as bool? ?? true;
+      _autoFinishWorkoutEnabled =
+          settings['autoFinishWorkoutEnabled'] as bool? ?? false;
+      _autoFinishWorkoutHours = settings['autoFinishWorkoutHours'] as int? ?? 4;
     }
   }
 
@@ -217,6 +225,8 @@ class GymLogProvider extends ChangeNotifier {
         'distanceUnit': _distanceUnit,
         'halfRepsEnabled': _halfRepsEnabled,
         'commentsEnabled': _commentsEnabled,
+        'autoFinishWorkoutEnabled': _autoFinishWorkoutEnabled,
+        'autoFinishWorkoutHours': _autoFinishWorkoutHours,
       },
     };
   }
@@ -454,6 +464,36 @@ class GymLogProvider extends ChangeNotifier {
     _commentsEnabled = enabled;
     notifyListeners();
     unawaited(_persist());
+  }
+
+  void setAutoFinishWorkoutEnabled(bool enabled) {
+    if (_autoFinishWorkoutEnabled == enabled) return;
+    _autoFinishWorkoutEnabled = enabled;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  void setAutoFinishWorkoutHours(int hours) {
+    if (hours < 1) return; // Minimum 1 hour
+    if (_autoFinishWorkoutHours == hours) return;
+    _autoFinishWorkoutHours = hours;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  void _checkAndAutoFinishOldWorkout() {
+    if (!_autoFinishWorkoutEnabled) return;
+    final session = _activeSession;
+    if (session == null) return;
+
+    final now = DateTime.now();
+    final sessionAge = now.difference(session.startedAt);
+    final threshold = Duration(hours: _autoFinishWorkoutHours);
+
+    if (sessionAge >= threshold) {
+      // Auto-finish the workout
+      finishWorkout();
+    }
   }
 
   void _handleTimerTick(Timer timer) {
