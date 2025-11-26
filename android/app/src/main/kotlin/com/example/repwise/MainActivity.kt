@@ -1,4 +1,4 @@
-package com.example.gym_log
+package com.example.repwise
 
 import android.content.Intent
 import android.os.Bundle
@@ -8,8 +8,8 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 	companion object {
-		const val ACTION_START_WORKOUT = "com.example.gym_log.START_WORKOUT"
-		private const val CHANNEL = "com.example.gym_log/workout_widget"
+		const val ACTION_START_WORKOUT = "com.example.repwise.START_WORKOUT"
+		private const val CHANNEL = "com.example.repwise/workout_widget"
 	}
 
 	private var methodChannel: MethodChannel? = null

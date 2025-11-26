@@ -3,13 +3,20 @@ import 'package:provider/provider.dart';
 
 import '../models/exercise.dart';
 import '../models/muscle_group.dart';
-import '../providers/gym_log_provider.dart';
+import '../providers/repwise_provider.dart';
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
 
+  static Future<void> showSettingsDialog(BuildContext context) async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => const _SettingsDialog(),
+    );
+  }
+
   static Future<void> showAddMuscleGroupDialog(BuildContext context) async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => const _TextEntryDialog(
@@ -27,7 +34,7 @@ class LibraryScreen extends StatelessWidget {
     BuildContext context,
     MuscleGroup group,
   ) async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final result = await showDialog<_ExerciseDialogResult>(
       context: context,
       builder: (dialogContext) => _ExerciseDialog(
@@ -46,7 +53,7 @@ class LibraryScreen extends StatelessWidget {
     BuildContext context,
     MuscleGroup group,
   ) async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _TextEntryDialog(
@@ -67,7 +74,7 @@ class LibraryScreen extends StatelessWidget {
     MuscleGroup group,
     Exercise exercise,
   ) async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final result = await showDialog<_ExerciseDialogResult>(
       context: context,
       builder: (dialogContext) => _ExerciseDialog(
@@ -91,7 +98,7 @@ class LibraryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<GymLogProvider>();
+    final provider = context.watch<RepwiseProvider>();
     final groups = provider.muscleGroups;
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -105,10 +112,21 @@ class LibraryScreen extends StatelessWidget {
                 'Muscle Groups',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              FilledButton.icon(
-                onPressed: () => showAddMuscleGroupDialog(context),
-                icon: const Icon(Icons.add),
-                label: const Text('Add'),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => showAddMuscleGroupDialog(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => showSettingsDialog(context),
+                    icon: const Icon(Icons.settings),
+                    tooltip: 'Settings',
+                  ),
+                ],
               ),
             ],
           ),
@@ -120,10 +138,6 @@ class LibraryScreen extends StatelessWidget {
                   )
                 : ListView.separated(
                     itemBuilder: (context, index) {
-                      if (index == groups.length) {
-                        // Settings section at the end
-                        return const _SettingsSection();
-                      }
                       final group = groups[index];
                       return Card(
                         clipBehavior: Clip.antiAlias,
@@ -198,7 +212,7 @@ class LibraryScreen extends StatelessWidget {
                     },
                     separatorBuilder: (context, _) =>
                         const SizedBox(height: 12),
-                    itemCount: groups.length + 1, // +1 for settings section
+                    itemCount: groups.length,
                   ),
           ),
         ],
@@ -207,20 +221,40 @@ class LibraryScreen extends StatelessWidget {
   }
 }
 
-class _SettingsSection extends StatelessWidget {
-  const _SettingsSection();
+class _SettingsDialog extends StatelessWidget {
+  const _SettingsDialog();
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<GymLogProvider>();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    final provider = context.watch<RepwiseProvider>();
+    return AlertDialog(
+      title: Stack(
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(right: 40),
+            child: Text('Settings'),
+          ),
+          Positioned(
+            top: -18,
+            right: -18,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close),
+              iconSize: 20,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              splashRadius: 20,
+            ),
+          ),
+        ],
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Settings', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -230,6 +264,7 @@ class _SettingsSection extends StatelessWidget {
                   ),
                 ),
                 SegmentedButton<String>(
+                  showSelectedIcon: false,
                   segments: const [
                     ButtonSegment(value: 'kg', label: Text('kg')),
                     ButtonSegment(value: 'lb', label: Text('lb')),
@@ -238,6 +273,13 @@ class _SettingsSection extends StatelessWidget {
                   onSelectionChanged: (Set<String> selected) {
                     provider.setWeightUnit(selected.first);
                   },
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -251,6 +293,7 @@ class _SettingsSection extends StatelessWidget {
                   ),
                 ),
                 SegmentedButton<String>(
+                  showSelectedIcon: false,
                   segments: const [
                     ButtonSegment(value: 'km', label: Text('km')),
                     ButtonSegment(value: 'mi', label: Text('mi')),
@@ -259,6 +302,13 @@ class _SettingsSection extends StatelessWidget {
                   onSelectionChanged: (Set<String> selected) {
                     provider.setDistanceUnit(selected.first);
                   },
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -271,9 +321,13 @@ class _SettingsSection extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-                Switch(
-                  value: provider.halfRepsEnabled,
-                  onChanged: provider.setHalfRepsEnabled,
+                Transform.scale(
+                  scale: 0.85,
+                  child: Switch(
+                    value: provider.halfRepsEnabled,
+                    onChanged: provider.setHalfRepsEnabled,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ],
             ),
@@ -286,9 +340,13 @@ class _SettingsSection extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-                Switch(
-                  value: provider.commentsEnabled,
-                  onChanged: provider.setCommentsEnabled,
+                Transform.scale(
+                  scale: 0.85,
+                  child: Switch(
+                    value: provider.commentsEnabled,
+                    onChanged: provider.setCommentsEnabled,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ],
             ),
@@ -304,7 +362,7 @@ class _SettingsSection extends StatelessWidget {
 class _AutoFinishWorkoutSetting extends StatefulWidget {
   const _AutoFinishWorkoutSetting({required this.provider});
 
-  final GymLogProvider provider;
+  final RepwiseProvider provider;
 
   @override
   State<_AutoFinishWorkoutSetting> createState() =>
@@ -351,9 +409,13 @@ class _AutoFinishWorkoutSettingState extends State<_AutoFinishWorkoutSetting> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-            Switch(
-              value: enabled,
-              onChanged: widget.provider.setAutoFinishWorkoutEnabled,
+            Transform.scale(
+              scale: 0.85,
+              child: Switch(
+                value: enabled,
+                onChanged: widget.provider.setAutoFinishWorkoutEnabled,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         ),

@@ -9,7 +9,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../models/exercise.dart';
 import '../models/muscle_group.dart';
 import '../models/workout.dart';
-import '../providers/gym_log_provider.dart';
+import '../providers/repwise_provider.dart';
 import '../utils/workout_entry_formatter.dart';
 import '../widgets/scrollable_metrics_text.dart';
 
@@ -44,7 +44,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _exportLogs(BuildContext context) async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final file = await provider.createExportFile();
     if (!context.mounted) {
       return;
@@ -93,7 +93,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
       return;
     }
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final success = await provider.importFromFile(File(path));
     if (!context.mounted) {
       return;
@@ -111,7 +111,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<GymLogProvider>();
+    final provider = context.watch<RepwiseProvider>();
     final selectedDay = _selectedDay ?? _focusedDay;
     final sessionsForSelectedDay = provider.sessionsForDay(selectedDay);
 
@@ -294,7 +294,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Set<String> _muscleGroupsForEvents(
     Iterable<WorkoutSession> sessions,
-    GymLogProvider provider,
+    RepwiseProvider provider,
   ) {
     final Set<String> names = <String>{};
     for (final session in sessions) {
@@ -410,7 +410,7 @@ class _SessionCard extends StatelessWidget {
   });
 
   final WorkoutSession session;
-  final GymLogProvider provider;
+  final RepwiseProvider provider;
   final Color Function(String) paletteResolver;
 
   @override
@@ -667,7 +667,7 @@ class _ExerciseHistorySection extends StatelessWidget {
   });
 
   final WorkoutExerciseLog log;
-  final GymLogProvider provider;
+  final RepwiseProvider provider;
   final bool showMuscleGroup;
 
   @override
@@ -748,7 +748,7 @@ class _WorkoutSetTile extends StatelessWidget {
 
   final WorkoutSet set;
   final int setNumber;
-  final GymLogProvider provider;
+  final RepwiseProvider provider;
 
   @override
   Widget build(BuildContext context) {

@@ -7,13 +7,13 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:gym_log/main.dart';
+import 'package:repwise/main.dart';
 
 void main() {
   testWidgets('shows muscle groups library by default', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const GymLogApp());
+    await tester.pumpWidget(const RepwiseApp());
 
     expect(find.text('Library'), findsWidgets);
     expect(find.text('Muscle Groups'), findsOneWidget);

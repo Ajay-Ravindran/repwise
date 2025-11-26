@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "gym_log" "\0"
+            VALUE "FileDescription", "Repwise" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "gym_log" "\0"
+            VALUE "InternalName", "repwise" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "gym_log.exe" "\0"
-            VALUE "ProductName", "gym_log" "\0"
+            VALUE "OriginalFilename", "repwise.exe" "\0"
+            VALUE "ProductName", "Repwise" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -1,4 +1,4 @@
-package com.example.gym_log
+package com.example.repwise
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager

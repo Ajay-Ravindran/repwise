@@ -2,22 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'providers/gym_log_provider.dart';
+import 'providers/repwise_provider.dart';
 import 'screens/library_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/workout_screen.dart';
 
 void main() {
-  runApp(const GymLogApp());
+  runApp(const RepwiseApp());
 }
 
-class GymLogApp extends StatelessWidget {
-  const GymLogApp({super.key});
+class RepwiseApp extends StatelessWidget {
+  const RepwiseApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => GymLogProvider()..initialize(),
+      create: (_) => RepwiseProvider()..initialize(),
       child: MaterialApp(
         title: 'Repwise',
         debugShowCheckedModeBanner: false,
@@ -35,23 +35,23 @@ class GymLogApp extends StatelessWidget {
             border: OutlineInputBorder(),
           ),
         ),
-        home: const GymLogHome(),
+        home: const RepwiseHome(),
       ),
     );
   }
 }
 
-class GymLogHome extends StatefulWidget {
-  const GymLogHome({super.key});
+class RepwiseHome extends StatefulWidget {
+  const RepwiseHome({super.key});
 
   @override
-  State<GymLogHome> createState() => _GymLogHomeState();
+  State<RepwiseHome> createState() => _RepwiseHomeState();
 }
 
-class _GymLogHomeState extends State<GymLogHome> {
+class _RepwiseHomeState extends State<RepwiseHome> {
   int _selectedIndex = 0;
   static const MethodChannel _widgetChannel = MethodChannel(
-    'com.example.gym_log/workout_widget',
+    'com.example.repwise/workout_widget',
   );
 
   static const List<Widget> _screens = <Widget>[
@@ -95,7 +95,7 @@ class _GymLogHomeState extends State<GymLogHome> {
   }
 
   Future<void> _handleStartWorkoutIntent() async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     if (!provider.isInitialized) {
       await provider.initialize();
     }

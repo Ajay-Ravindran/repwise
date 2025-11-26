@@ -1,6 +1,6 @@
 {
-    "name": "gym_log",
-    "short_name": "gym_log",
+    "name": "Repwise",
+    "short_name": "Repwise",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

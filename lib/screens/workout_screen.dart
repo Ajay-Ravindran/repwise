@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 import '../models/exercise.dart';
 import '../models/muscle_group.dart';
 import '../models/workout.dart';
-import '../providers/gym_log_provider.dart';
+import '../providers/repwise_provider.dart';
 import '../utils/workout_entry_formatter.dart';
 import '../widgets/scrollable_metrics_text.dart';
 
@@ -28,7 +28,7 @@ class WorkoutScreen extends StatefulWidget {
 
   static Future<void> showStartExerciseSheet(BuildContext context) async {
     final rootContext = context;
-    final provider = rootContext.read<GymLogProvider>();
+    final provider = rootContext.read<RepwiseProvider>();
     final session = provider.activeSession;
     if (session == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
@@ -262,7 +262,7 @@ class WorkoutScreen extends StatefulWidget {
     WorkoutSet? initialSet,
   }) async {
     final rootContext = context;
-    final provider = rootContext.read<GymLogProvider>();
+    final provider = rootContext.read<RepwiseProvider>();
     final session = provider.activeSession;
     if (session == null) {
       ScaffoldMessenger.of(rootContext).showSnackBar(
@@ -1111,7 +1111,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-  void _maybeHandleTimerCompletion(GymLogProvider provider) {
+  void _maybeHandleTimerCompletion(RepwiseProvider provider) {
     final completionId = provider.timerCompletionId;
     if (completionId == _lastCompletionSignalId) {
       return;
@@ -1131,7 +1131,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     });
   }
 
-  Future<void> _playCompletionCue(GymLogProvider provider) async {
+  Future<void> _playCompletionCue(RepwiseProvider provider) async {
     if (provider.timerSoundEnabled) {
       final bytes = _toneBytes ??= _createGentleTone();
       try {
@@ -1189,7 +1189,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   Future<void> _showTimerSetupSheet(BuildContext context) async {
-    final provider = context.read<GymLogProvider>();
+    final provider = context.read<RepwiseProvider>();
     final existing = provider.timerTotalDuration ?? Duration.zero;
 
     final result = await showModalBottomSheet<_TimerSetupResult>(
@@ -1236,7 +1236,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: SingleChildScrollView(
-                child: Consumer<GymLogProvider>(
+                child: Consumer<RepwiseProvider>(
                   builder: (ctx, provider, _) {
                     return _buildTimerDialogContent(
                       ctx,
@@ -1265,7 +1265,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildTimerDialogContent(
     BuildContext context,
-    GymLogProvider provider, {
+    RepwiseProvider provider, {
     required VoidCallback onClose,
     required Future<void> Function() onOpenSetup,
   }) {
@@ -1409,7 +1409,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<GymLogProvider>();
+    final provider = context.watch<RepwiseProvider>();
     _maybeHandleTimerCompletion(provider);
     final session = provider.activeSession;
     final groupsById = {
@@ -1474,7 +1474,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildHeader(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutSession? session,
   ) {
     return Row(
@@ -1506,7 +1506,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildActiveWorkoutBody(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutSession session,
     Map<String, MuscleGroup> groupsById,
   ) {
@@ -1598,7 +1598,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildExerciseCard(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutExerciseLog log,
     Map<String, MuscleGroup> groupsById,
   ) {
@@ -1695,7 +1695,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildSetsList(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutExerciseLog log,
   ) {
     if (log.sets.isEmpty) {
@@ -1814,7 +1814,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   List<String> _exerciseNamesFor(
     WorkoutExerciseLog log,
-    GymLogProvider provider,
+    RepwiseProvider provider,
   ) {
     final ids = <String>{...log.exerciseIds};
     for (final set in log.sets) {
@@ -1833,7 +1833,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return names;
   }
 
-  void _handleStartWorkout(BuildContext context, GymLogProvider provider) {
+  void _handleStartWorkout(BuildContext context, RepwiseProvider provider) {
     provider.startWorkout();
     if (!mounted) {
       return;
@@ -1851,7 +1851,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  void _handleFinishWorkout(BuildContext context, GymLogProvider provider) {
+  void _handleFinishWorkout(BuildContext context, RepwiseProvider provider) {
     provider.finishWorkout();
     if (!mounted) {
       return;
@@ -1871,7 +1871,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _handleFinishExercise(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutExerciseLog log,
   ) {
     final success = provider.completeExercise(log.id);
@@ -1883,7 +1883,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _handleCancelExercise(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutExerciseLog log,
   ) {
     final success = provider.cancelExercise(log.id);
@@ -1895,7 +1895,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _handleReopenExercise(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutExerciseLog log,
   ) {
     final success = provider.reopenExercise(log.id);
@@ -1907,7 +1907,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _handleRemoveSet(
     BuildContext context,
-    GymLogProvider provider,
+    RepwiseProvider provider,
     WorkoutExerciseLog log,
     WorkoutSet set,
   ) {
@@ -2176,7 +2176,7 @@ class _SetRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<GymLogProvider>();
+    final provider = context.watch<RepwiseProvider>();
     final metrics = formatWorkoutEntry(
       entry,
       weightUnit: provider.weightUnit,

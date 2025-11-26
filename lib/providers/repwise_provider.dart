@@ -8,13 +8,13 @@ import 'package:uuid/uuid.dart';
 import '../models/exercise.dart';
 import '../models/muscle_group.dart';
 import '../models/workout.dart';
-import '../utils/gym_log_storage.dart';
+import '../utils/repwise_storage.dart';
 
-class GymLogProvider extends ChangeNotifier {
-  GymLogProvider({GymLogStorage? storage})
-    : _storage = storage ?? const GymLogStorage();
+class RepwiseProvider extends ChangeNotifier {
+  RepwiseProvider({RepwiseStorage? storage})
+    : _storage = storage ?? const RepwiseStorage();
 
-  final GymLogStorage _storage;
+  final RepwiseStorage _storage;
   final Uuid _uuid = const Uuid();
   final List<MuscleGroup> _muscleGroups = <MuscleGroup>[];
   final List<WorkoutSession> _completedSessions = <WorkoutSession>[];

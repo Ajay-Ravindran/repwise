@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-class GymLogStorage {
-  const GymLogStorage();
+class RepwiseStorage {
+  const RepwiseStorage();
 
-  static const String _stateFileName = 'gym_log_state.json';
+  static const String _stateFileName = 'repwise_state.json';
 
   Future<File> _stateFile() async {
     final directory = await getApplicationDocumentsDirectory();
