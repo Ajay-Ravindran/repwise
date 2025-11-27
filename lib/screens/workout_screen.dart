@@ -2163,7 +2163,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _SetRow extends StatelessWidget {
+class _SetRow extends StatefulWidget {
   const _SetRow({
     required this.exercise,
     required this.entry,
@@ -2175,110 +2175,108 @@ class _SetRow extends StatelessWidget {
   final bool isSuperset;
 
   @override
+  State<_SetRow> createState() => _SetRowState();
+}
+
+class _SetRowState extends State<_SetRow> {
+  bool _isExpanded = false;
+
+  void _toggleComment() {
+    setState(() {
+      _isExpanded = !_isExpanded;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final provider = context.watch<RepwiseProvider>();
     final metrics = formatWorkoutEntry(
-      entry,
+      widget.entry,
       weightUnit: provider.weightUnit,
       distanceUnit: provider.distanceUnit,
     );
-    final hasComment = (entry.comment?.trim().isNotEmpty ?? false);
+    final hasComment = (widget.entry.comment?.trim().isNotEmpty ?? false);
+    final theme = Theme.of(context);
 
-    void showCommentDialog() {
-      final commentText = entry.comment?.trim();
-      if (commentText == null || commentText.isEmpty) {
-        return;
-      }
-      final theme = Theme.of(context);
-      showDialog<void>(
-        context: context,
-        barrierColor: Colors.black54,
-        builder: (dialogContext) {
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 40,
-              vertical: 24,
-            ),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 280, maxHeight: 200),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2C2C),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withOpacity(0.3),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 4),
-                  ),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 24,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (widget.isSuperset)
+                    SizedBox(
+                      width: 100,
+                      child: Text(
+                        widget.exercise.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  else
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: Text(
+                        widget.exercise.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  const SizedBox(width: 12),
+                  Expanded(child: ScrollableMetricsText(text: metrics)),
+                  if (hasComment)
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: IconButton(
+                        tooltip: 'View comment',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minHeight: 28,
+                          minWidth: 28,
+                        ),
+                        splashRadius: 18,
+                        iconSize: 18,
+                        onPressed: _toggleComment,
+                        icon: Icon(
+                          _isExpanded
+                              ? Icons.chat_bubble
+                              : Icons.chat_bubble_outline,
+                        ),
+                      ),
+                    ),
                 ],
               ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  commentText,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withOpacity(0.95),
-                    height: 1.4,
-                  ),
-                ),
-              ),
             ),
-          );
-        },
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: SizedBox(
-        height: 24,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (isSuperset)
-              SizedBox(
-                width: 100,
-                child: Text(
-                  exercise.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              )
-            else
-              Flexible(
-                fit: FlexFit.loose,
-                child: Text(
-                  exercise.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            const SizedBox(width: 12),
-            Expanded(child: ScrollableMetricsText(text: metrics)),
-            if (hasComment)
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: IconButton(
-                  tooltip: 'View comment',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minHeight: 28,
-                    minWidth: 28,
+            if (_isExpanded && hasComment) ...[
+              const SizedBox(height: 4),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(
+                    0.5,
                   ),
-                  splashRadius: 18,
-                  iconSize: 18,
-                  onPressed: showCommentDialog,
-                  icon: const Icon(Icons.chat_bubble_outline),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    widget.entry.comment!.trim(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.3,
+                    ),
+                  ),
                 ),
               ),
+            ],
           ],
         ),
       ),

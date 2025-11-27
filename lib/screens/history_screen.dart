@@ -932,7 +932,7 @@ class _CompletedSetReference {
   final WorkoutSet set;
 }
 
-class _WorkoutSetTile extends StatelessWidget {
+class _WorkoutSetTile extends StatefulWidget {
   const _WorkoutSetTile({
     required this.set,
     required this.setNumber,
@@ -944,73 +944,39 @@ class _WorkoutSetTile extends StatelessWidget {
   final RepwiseProvider provider;
 
   @override
-  Widget build(BuildContext context) {
-    final MuscleGroup? group = provider.muscleGroupById(set.muscleGroupId);
-    final theme = Theme.of(context);
+  State<_WorkoutSetTile> createState() => _WorkoutSetTileState();
+}
 
-    void showCommentDialog(String exerciseName, String comment) {
-      final trimmed = comment.trim();
-      if (trimmed.isEmpty) {
-        return;
-      }
-      showDialog<void>(
-        context: context,
-        barrierColor: Colors.black54,
-        builder: (dialogContext) {
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 40,
-              vertical: 24,
-            ),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 280, maxHeight: 200),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2C2C),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withOpacity(0.3),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  trimmed,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withOpacity(0.95),
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    }
+class _WorkoutSetTileState extends State<_WorkoutSetTile> {
+  final Map<int, bool> _expandedComments = {};
+
+  void _toggleComment(int entryIndex) {
+    setState(() {
+      _expandedComments[entryIndex] = !(_expandedComments[entryIndex] ?? false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final MuscleGroup? group = widget.provider.muscleGroupById(
+      widget.set.muscleGroupId,
+    );
+    final theme = Theme.of(context);
 
     // Build entry widgets based on whether it's a superset or single exercise
     final List<Widget> entryWidgets = <Widget>[];
 
     // Check if this set holds any current PRs (only for single-exercise sets)
-    final currentPRs = set.entries.length == 1 && set.entries.isNotEmpty
-        ? provider.getCurrentPRs(set.entries.first.exerciseId)
+    final currentPRs =
+        widget.set.entries.length == 1 && widget.set.entries.isNotEmpty
+        ? widget.provider.getCurrentPRs(widget.set.entries.first.exerciseId)
         : <String>{};
-    final isPRSet = currentPRs.contains(set.id);
+    final isPRSet = currentPRs.contains(widget.set.id);
 
-    for (var i = 0; i < set.entries.length; i++) {
-      final entry = set.entries[i];
+    for (var i = 0; i < widget.set.entries.length; i++) {
+      final entry = widget.set.entries[i];
       final exercise =
-          provider.exerciseById(entry.exerciseId) ??
+          widget.provider.exerciseById(entry.exerciseId) ??
           group?.exercises.firstWhere(
             (exercise) => exercise.id == entry.exerciseId,
             orElse: () => Exercise(
@@ -1027,12 +993,14 @@ class _WorkoutSetTile extends StatelessWidget {
       final hasComment = (entry.comment?.trim().isNotEmpty ?? false);
       final metrics = formatWorkoutEntry(
         entry,
-        weightUnit: provider.weightUnit,
-        distanceUnit: provider.distanceUnit,
+        weightUnit: widget.provider.weightUnit,
+        distanceUnit: widget.provider.distanceUnit,
       );
 
+      final isExpanded = _expandedComments[i] ?? false;
+
       // For superset, show exercise name on left and metrics on right
-      if (set.entries.length > 1) {
+      if (widget.set.entries.length > 1) {
         entryWidgets.add(
           Padding(
             padding: const EdgeInsets.only(left: 12),
@@ -1061,15 +1029,46 @@ class _WorkoutSetTile extends StatelessWidget {
                       ),
                       splashRadius: 18,
                       iconSize: 18,
-                      onPressed: () =>
-                          showCommentDialog(exercise.name, entry.comment!),
-                      icon: const Icon(Icons.chat_bubble_outline),
+                      onPressed: () => _toggleComment(i),
+                      icon: Icon(
+                        isExpanded
+                            ? Icons.chat_bubble
+                            : Icons.chat_bubble_outline,
+                      ),
                     ),
                   ),
               ],
             ),
           ),
         );
+        // Add inline comment display for superset
+        if (isExpanded && hasComment) {
+          entryWidgets.add(const SizedBox(height: 4));
+          entryWidgets.add(
+            Padding(
+              padding: const EdgeInsets.only(left: 12, right: 4),
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(
+                    0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    entry.comment!.trim(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
       } else {
         // For single exercise, just show metrics with comment icon aligned
         entryWidgets.add(
@@ -1092,24 +1091,52 @@ class _WorkoutSetTile extends StatelessWidget {
                       ),
                       splashRadius: 18,
                       iconSize: 18,
-                      onPressed: () =>
-                          showCommentDialog(exercise.name, entry.comment!),
-                      icon: const Icon(Icons.chat_bubble_outline),
+                      onPressed: () => _toggleComment(i),
+                      icon: Icon(
+                        isExpanded
+                            ? Icons.chat_bubble
+                            : Icons.chat_bubble_outline,
+                      ),
                     ),
                   ),
               ],
             ),
           ),
         );
+        // Add inline comment display for single exercise
+        if (isExpanded && hasComment) {
+          entryWidgets.add(const SizedBox(height: 4));
+          entryWidgets.add(
+            Container(
+              constraints: const BoxConstraints(maxHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withOpacity(
+                  0.5,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: SingleChildScrollView(
+                child: Text(
+                  entry.comment!.trim(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
       }
 
-      if (i < set.entries.length - 1) {
+      if (i < widget.set.entries.length - 1) {
         entryWidgets.add(const SizedBox(height: 6));
       }
     }
 
     // For superset, use a different layout with set number on its own line
-    if (set.entries.length > 1) {
+    if (widget.set.entries.length > 1) {
       return Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
@@ -1125,7 +1152,7 @@ class _WorkoutSetTile extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    'Set $setNumber',
+                    'Set ${widget.setNumber}',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1142,7 +1169,14 @@ class _WorkoutSetTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              ...entryWidgets,
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: entryWidgets,
+                ),
+              ),
             ],
           ),
         ),
@@ -1167,7 +1201,7 @@ class _WorkoutSetTile extends StatelessWidget {
               child: Row(
                 children: [
                   Text(
-                    'Set $setNumber',
+                    'Set ${widget.setNumber}',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1185,9 +1219,13 @@ class _WorkoutSetTile extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: entryWidgets,
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: entryWidgets,
+                ),
               ),
             ),
           ],
