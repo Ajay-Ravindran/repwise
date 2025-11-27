@@ -840,38 +840,6 @@ class RepwiseProvider extends ChangeNotifier {
     return true;
   }
 
-  bool removeCompletedSet({
-    required String sessionId,
-    required String exerciseLogId,
-    required String setId,
-  }) {
-    final sessionIndex = _completedSessions.indexWhere(
-      (session) => session.id == sessionId,
-    );
-    if (sessionIndex == -1) {
-      return false;
-    }
-    final session = _completedSessions[sessionIndex];
-    final exercise = _exerciseById(session, exerciseLogId);
-    if (exercise == null) {
-      return false;
-    }
-    final setIndex = exercise.sets.indexWhere((set) => set.id == setId);
-    if (setIndex == -1) {
-      return false;
-    }
-    exercise.sets.removeAt(setIndex);
-    if (exercise.sets.isEmpty) {
-      session.exercises.removeWhere((element) => element.id == exerciseLogId);
-    }
-    if (session.exercises.isEmpty) {
-      _completedSessions.removeAt(sessionIndex);
-    }
-    notifyListeners();
-    unawaited(_persist());
-    return true;
-  }
-
   Exercise? exerciseById(String id) {
     for (final group in _muscleGroups) {
       for (final exercise in group.exercises) {

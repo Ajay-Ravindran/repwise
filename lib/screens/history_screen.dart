@@ -635,13 +635,6 @@ class _SessionCard extends StatelessWidget {
                   '$totalSets set${totalSets == 1 ? '' : 's'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'Workout options',
-                  onPressed: totalSets == 0
-                      ? null
-                      : () => _showSetOptions(context),
-                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -723,133 +716,6 @@ class _SessionCard extends StatelessWidget {
 
     return widgets;
   }
-
-  void _showSetOptions(BuildContext context) {
-    final setRefs = _completedSetReferences();
-    if (setRefs.isEmpty) {
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    'Delete a set',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: setRefs.length,
-                    itemBuilder: (context, index) {
-                      final reference = setRefs[index];
-                      final summary = _setSummary(reference.set);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          radius: 16,
-                          child: Text('${index + 1}'),
-                        ),
-                        title: Text('Set ${index + 1}'),
-                        subtitle: summary == null ? null : Text(summary),
-                        trailing: const Icon(Icons.delete_outline),
-                        onTap: () {
-                          Navigator.of(sheetContext).pop();
-                          _confirmDeleteSet(context, reference);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String? _setSummary(WorkoutSet set) {
-    if (set.entries.isEmpty) {
-      return null;
-    }
-    final names = set.entries
-        .map(
-          (entry) =>
-              provider.exerciseById(entry.exerciseId)?.name ?? 'Exercise',
-        )
-        .toList();
-    if (names.isEmpty) {
-      return null;
-    }
-    if (names.length == 1) {
-      return names.first;
-    }
-    return '${names.take(2).join(', ')}${names.length > 2 ? '…' : ''}';
-  }
-
-  Future<void> _confirmDeleteSet(
-    BuildContext context,
-    _CompletedSetReference reference,
-  ) async {
-    final theme = Theme.of(context);
-    final shouldDelete = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete set?'),
-          content: const Text(
-            'This will remove the set from your history. This action cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text('Cancel', style: theme.textTheme.labelLarge),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldDelete != true || !context.mounted) {
-      return;
-    }
-    final removed = provider.removeCompletedSet(
-      sessionId: session.id,
-      exerciseLogId: reference.exercise.id,
-      setId: reference.set.id,
-    );
-    if (!removed && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Unable to delete set.')));
-    }
-  }
-
-  List<_CompletedSetReference> _completedSetReferences() {
-    final refs = <_CompletedSetReference>[];
-    for (final exercise in session.exercises) {
-      for (final set in exercise.sets) {
-        refs.add(_CompletedSetReference(exercise: exercise, set: set));
-      }
-    }
-    refs.sort((a, b) => a.set.timestamp.compareTo(b.set.timestamp));
-    return refs;
-  }
 }
 
 class _ExerciseHistorySection extends StatelessWidget {
@@ -923,13 +789,6 @@ class _ExerciseHistorySection extends StatelessWidget {
     names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return names;
   }
-}
-
-class _CompletedSetReference {
-  const _CompletedSetReference({required this.exercise, required this.set});
-
-  final WorkoutExerciseLog exercise;
-  final WorkoutSet set;
 }
 
 class _WorkoutSetTile extends StatefulWidget {
