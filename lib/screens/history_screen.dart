@@ -23,6 +23,7 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   late DateTime _focusedDay;
   DateTime? _selectedDay;
+  final Set<String> _selectedMuscleGroupIds = <String>{};
 
   static final List<Color> _palette = <Color>[
     const Color(0xFF80CBC4),
@@ -41,6 +42,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final now = DateTime.now();
     _focusedDay = DateTime(now.year, now.month, now.day);
     _selectedDay = _focusedDay;
+
+    // Apply auto-filter if enabled and there's an active workout
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = context.read<RepwiseProvider>();
+      if (provider.autoFilterHistoryEnabled) {
+        final muscleGroupId = provider.activeWorkoutMuscleGroupId;
+        if (muscleGroupId != null) {
+          setState(() {
+            _selectedMuscleGroupIds.add(muscleGroupId);
+          });
+        }
+      }
+    });
   }
 
   Future<void> _exportLogs(BuildContext context) async {
@@ -73,6 +87,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Sharing failed.')));
     }
+  }
+
+  void _showAutoFilterInfo(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Auto-Filter'),
+          content: const Text(
+            'When enabled, the History screen automatically filters by the muscle group of your current active exercise. This helps you quickly compare previous logs while working out.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _importLogs(BuildContext context) async {
@@ -132,9 +166,76 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   case _HistoryAction.import:
                     _importLogs(context);
                     break;
+                  case _HistoryAction.autoFilter:
+                    // Toggle is handled in the CheckedPopupMenuItem
+                    break;
                 }
               },
               itemBuilder: (context) => <PopupMenuEntry<_HistoryAction>>[
+                PopupMenuItem<_HistoryAction>(
+                  enabled: false,
+                  child: StatefulBuilder(
+                    builder: (context, setMenuState) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Auto-Filter',
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _showAutoFilterInfo(context);
+                                },
+                                child: const Icon(Icons.info_outline, size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              Transform.scale(
+                                scale: 0.85,
+                                child: Switch(
+                                  value: provider.autoFilterHistoryEnabled,
+                                  onChanged: (enabled) {
+                                    provider.setAutoFilterHistoryEnabled(
+                                      enabled,
+                                    );
+                                    // Update the menu state
+                                    setMenuState(() {});
+                                    // Apply or clear filter based on new state
+                                    if (!enabled) {
+                                      // Clear filter when disabled
+                                      setState(() {
+                                        _selectedMuscleGroupIds.clear();
+                                      });
+                                    } else {
+                                      // Apply filter when enabled
+                                      final muscleGroupId =
+                                          provider.activeWorkoutMuscleGroupId;
+                                      if (muscleGroupId != null) {
+                                        setState(() {
+                                          _selectedMuscleGroupIds.clear();
+                                          _selectedMuscleGroupIds.add(
+                                            muscleGroupId,
+                                          );
+                                        });
+                                      }
+                                    }
+                                  },
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const PopupMenuDivider(),
                 PopupMenuItem<_HistoryAction>(
                   value: _HistoryAction.export,
                   child: Row(
@@ -175,11 +276,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
               selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
               calendarFormat: CalendarFormat.month,
               startingDayOfWeek: StartingDayOfWeek.monday,
+              daysOfWeekHeight: 32,
+              rowHeight: 44,
               headerStyle: const HeaderStyle(
                 formatButtonVisible: false,
                 titleCentered: true,
+                headerPadding: EdgeInsets.symmetric(vertical: 8),
               ),
               calendarStyle: const CalendarStyle(
+                cellPadding: EdgeInsets.all(4),
                 todayDecoration: BoxDecoration(
                   color: Color(0xFF26A69A),
                   shape: BoxShape.circle,
@@ -245,7 +350,45 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     ];
 
-    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 16)));
+    // Add FilterChip bar
+    final allMuscleGroups = _getAllWorkoutMuscleGroups(provider);
+    if (allMuscleGroups.isNotEmpty) {
+      slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 12)));
+      slivers.add(
+        SliverToBoxAdapter(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: allMuscleGroups.map((group) {
+                final isSelected = _selectedMuscleGroupIds.contains(group.id);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: isSelected,
+                    label: Text(group.name),
+                    avatar: CircleAvatar(
+                      backgroundColor: _colorForName(group.name),
+                      radius: 10,
+                    ),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedMuscleGroupIds.add(group.id);
+                        } else {
+                          _selectedMuscleGroupIds.remove(group.id);
+                        }
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      );
+    }
+
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 12)));
     slivers.add(
       SliverToBoxAdapter(
         child: _SelectedDaySummary(
@@ -259,22 +402,32 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
     slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
 
-    if (sessionsForSelectedDay.isEmpty) {
+    // Filter sessions by selected muscle groups
+    final filteredSessions = _selectedMuscleGroupIds.isEmpty
+        ? sessionsForSelectedDay
+        : sessionsForSelectedDay.where((session) {
+            return session.exercises.any(
+              (exercise) =>
+                  _selectedMuscleGroupIds.contains(exercise.muscleGroupId),
+            );
+          }).toList();
+
+    if (filteredSessions.isEmpty) {
+      final message = _selectedMuscleGroupIds.isEmpty
+          ? 'No workouts logged for this day. Finish a workout to see it here.'
+          : 'No workouts found for the selected muscle groups on this day.';
       slivers.add(
-        const SliverFillRemaining(
+        SliverFillRemaining(
           hasScrollBody: false,
-          child: _EmptyHistoryState(
-            message:
-                'No workouts logged for this day. Finish a workout to see it here.',
-          ),
+          child: _EmptyHistoryState(message: message),
         ),
       );
     }
-    if (sessionsForSelectedDay.isNotEmpty) {
+    if (filteredSessions.isNotEmpty) {
       slivers.add(
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
-            final session = sessionsForSelectedDay[index];
+            final session = filteredSessions[index];
             final bottomPadding = index == sessionsForSelectedDay.length - 1
                 ? 0.0
                 : 12.0;
@@ -284,9 +437,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 session: session,
                 provider: provider,
                 paletteResolver: _colorForName,
+                selectedMuscleGroupIds: _selectedMuscleGroupIds,
               ),
             );
-          }, childCount: sessionsForSelectedDay.length),
+          }, childCount: filteredSessions.length),
         ),
       );
     }
@@ -295,6 +449,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
       padding: const EdgeInsets.all(16),
       child: CustomScrollView(slivers: slivers),
     );
+  }
+
+  List<MuscleGroup> _getAllWorkoutMuscleGroups(RepwiseProvider provider) {
+    final Set<String> muscleGroupIds = <String>{};
+    for (final session in provider.completedSessions) {
+      for (final exercise in session.exercises) {
+        if (exercise.hasSets) {
+          muscleGroupIds.add(exercise.muscleGroupId);
+        }
+      }
+    }
+    final groups = muscleGroupIds
+        .map((id) => provider.muscleGroupById(id))
+        .whereType<MuscleGroup>()
+        .toList();
+    groups.sort((a, b) => a.name.compareTo(b.name));
+    return groups;
   }
 
   Set<String> _muscleGroupsForEvents(
@@ -322,7 +493,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-enum _HistoryAction { export, import }
+enum _HistoryAction { export, import, autoFilter }
 
 class _SelectedDaySummary extends StatelessWidget {
   const _SelectedDaySummary({
@@ -412,11 +583,13 @@ class _SessionCard extends StatelessWidget {
     required this.session,
     required this.provider,
     required this.paletteResolver,
+    required this.selectedMuscleGroupIds,
   });
 
   final WorkoutSession session;
   final RepwiseProvider provider;
   final Color Function(String) paletteResolver;
+  final Set<String> selectedMuscleGroupIds;
 
   @override
   Widget build(BuildContext context) {
@@ -426,11 +599,21 @@ class _SessionCard extends StatelessWidget {
           exercise.muscleGroupId,
         ),
     };
-    final totalSets = session.exercises.fold<int>(
+    // Filter exercises by selected muscle groups
+    final visibleExercises = selectedMuscleGroupIds.isEmpty
+        ? session.exercises
+        : session.exercises
+              .where(
+                (exercise) =>
+                    selectedMuscleGroupIds.contains(exercise.muscleGroupId),
+              )
+              .toList();
+
+    final totalSets = visibleExercises.fold<int>(
       0,
       (sum, exercise) => sum + exercise.sets.length,
     );
-    final completedExercises = session.exercises
+    final completedExercises = visibleExercises
         .where((exercise) => exercise.hasSets)
         .toList(growable: false);
 

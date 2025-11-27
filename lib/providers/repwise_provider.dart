@@ -36,6 +36,7 @@ class RepwiseProvider extends ChangeNotifier {
   bool _commentsEnabled = true;
   bool _autoFinishWorkoutEnabled = false;
   int _autoFinishWorkoutHours = 4;
+  bool _autoFilterHistoryEnabled = false;
 
   List<MuscleGroup> get muscleGroups =>
       List<MuscleGroup>.unmodifiable(_muscleGroups);
@@ -83,6 +84,7 @@ class RepwiseProvider extends ChangeNotifier {
   bool get commentsEnabled => _commentsEnabled;
   bool get autoFinishWorkoutEnabled => _autoFinishWorkoutEnabled;
   int get autoFinishWorkoutHours => _autoFinishWorkoutHours;
+  bool get autoFilterHistoryEnabled => _autoFilterHistoryEnabled;
 
   Map<DateTime, List<WorkoutSession>> get completedSessionsByDate {
     final Map<DateTime, List<WorkoutSession>> grouped =
@@ -178,6 +180,8 @@ class RepwiseProvider extends ChangeNotifier {
       _autoFinishWorkoutEnabled =
           settings['autoFinishWorkoutEnabled'] as bool? ?? false;
       _autoFinishWorkoutHours = settings['autoFinishWorkoutHours'] as int? ?? 4;
+      _autoFilterHistoryEnabled =
+          settings['autoFilterHistoryEnabled'] as bool? ?? false;
     }
   }
 
@@ -227,6 +231,7 @@ class RepwiseProvider extends ChangeNotifier {
         'commentsEnabled': _commentsEnabled,
         'autoFinishWorkoutEnabled': _autoFinishWorkoutEnabled,
         'autoFinishWorkoutHours': _autoFinishWorkoutHours,
+        'autoFilterHistoryEnabled': _autoFilterHistoryEnabled,
       },
     };
   }
@@ -479,6 +484,39 @@ class RepwiseProvider extends ChangeNotifier {
     _autoFinishWorkoutHours = hours;
     notifyListeners();
     unawaited(_persist());
+  }
+
+  void setAutoFilterHistoryEnabled(bool enabled) {
+    if (_autoFilterHistoryEnabled == enabled) return;
+    _autoFilterHistoryEnabled = enabled;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  /// Returns the muscle group ID of the current active exercise,
+  /// or the last logged exercise if no active exercise exists.
+  /// Returns null if there's no active workout.
+  String? get activeWorkoutMuscleGroupId {
+    final session = _activeSession;
+    if (session == null || session.exercises.isEmpty) {
+      return null;
+    }
+
+    // First, try to get the current active exercise
+    for (final exercise in session.exercises.reversed) {
+      if (!exercise.isComplete) {
+        return exercise.muscleGroupId;
+      }
+    }
+
+    // If all exercises are complete, get the last logged exercise
+    for (final exercise in session.exercises.reversed) {
+      if (exercise.hasSets) {
+        return exercise.muscleGroupId;
+      }
+    }
+
+    return null;
   }
 
   void _checkAndAutoFinishOldWorkout() {
