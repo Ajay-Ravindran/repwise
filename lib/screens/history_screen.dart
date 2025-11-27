@@ -162,78 +162,83 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       const SliverToBoxAdapter(child: SizedBox(height: 16)),
       SliverToBoxAdapter(
-        child: Card(
-          clipBehavior: Clip.antiAlias,
-          child: TableCalendar<WorkoutSession>(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2100, 12, 31),
-            focusedDay: _focusedDay,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            calendarFormat: CalendarFormat.month,
-            startingDayOfWeek: StartingDayOfWeek.monday,
-            headerStyle: const HeaderStyle(
-              formatButtonVisible: false,
-              titleCentered: true,
-            ),
-            calendarStyle: const CalendarStyle(
-              todayDecoration: BoxDecoration(
-                color: Color(0xFF26A69A),
-                shape: BoxShape.circle,
+        child: GestureDetector(
+          onHorizontalDragStart: (_) {},
+          onHorizontalDragUpdate: (_) {},
+          onHorizontalDragEnd: (_) {},
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            child: TableCalendar<WorkoutSession>(
+              firstDay: DateTime.utc(2020, 1, 1),
+              lastDay: DateTime.utc(2100, 12, 31),
+              focusedDay: _focusedDay,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              calendarFormat: CalendarFormat.month,
+              startingDayOfWeek: StartingDayOfWeek.monday,
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
               ),
-              selectedDecoration: BoxDecoration(
-                color: Color(0xFF00897B),
-                shape: BoxShape.circle,
+              calendarStyle: const CalendarStyle(
+                todayDecoration: BoxDecoration(
+                  color: Color(0xFF26A69A),
+                  shape: BoxShape.circle,
+                ),
+                selectedDecoration: BoxDecoration(
+                  color: Color(0xFF00897B),
+                  shape: BoxShape.circle,
+                ),
               ),
-            ),
-            eventLoader: (day) => provider.sessionsForDay(day),
-            onDaySelected: (selected, focused) {
-              setState(() {
-                _selectedDay = DateTime(
-                  selected.year,
-                  selected.month,
-                  selected.day,
-                );
-                _focusedDay = focused;
-              });
-            },
-            onPageChanged: (focused) => _focusedDay = focused,
-            calendarBuilders: CalendarBuilders(
-              markerBuilder: (context, day, events) {
-                if (events.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                final muscleNames = _muscleGroupsForEvents(
-                  events.cast<WorkoutSession>(),
-                  provider,
-                ).toList(growable: false);
-                if (muscleNames.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 2,
-                      runSpacing: 2,
-                      children: muscleNames
-                          .take(4)
-                          .map(
-                            (name) => Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: _colorForName(name),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                );
+              eventLoader: (day) => provider.sessionsForDay(day),
+              onDaySelected: (selected, focused) {
+                setState(() {
+                  _selectedDay = DateTime(
+                    selected.year,
+                    selected.month,
+                    selected.day,
+                  );
+                  _focusedDay = focused;
+                });
               },
+              onPageChanged: (focused) => _focusedDay = focused,
+              calendarBuilders: CalendarBuilders(
+                markerBuilder: (context, day, events) {
+                  if (events.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  final muscleNames = _muscleGroupsForEvents(
+                    events.cast<WorkoutSession>(),
+                    provider,
+                  ).toList(growable: false);
+                  if (muscleNames.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 2,
+                        runSpacing: 2,
+                        children: muscleNames
+                            .take(4)
+                            .map(
+                              (name) => Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: _colorForName(name),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -560,24 +565,29 @@ class _SessionCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...setRefs.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final reference = entry.value;
-                  final summary = _setSummary(reference.set);
-                  return ListTile(
-                    leading: CircleAvatar(
-                      radius: 16,
-                      child: Text('${index + 1}'),
-                    ),
-                    title: Text('Set ${index + 1}'),
-                    subtitle: summary == null ? null : Text(summary),
-                    trailing: const Icon(Icons.delete_outline),
-                    onTap: () {
-                      Navigator.of(sheetContext).pop();
-                      _confirmDeleteSet(context, reference);
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: setRefs.length,
+                    itemBuilder: (context, index) {
+                      final reference = setRefs[index];
+                      final summary = _setSummary(reference.set);
+                      return ListTile(
+                        leading: CircleAvatar(
+                          radius: 16,
+                          child: Text('${index + 1}'),
+                        ),
+                        title: Text('Set ${index + 1}'),
+                        subtitle: summary == null ? null : Text(summary),
+                        trailing: const Icon(Icons.delete_outline),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          _confirmDeleteSet(context, reference);
+                        },
+                      );
                     },
-                  );
-                }),
+                  ),
+                ),
               ],
             ),
           ),
@@ -762,16 +772,44 @@ class _WorkoutSetTile extends StatelessWidget {
       }
       showDialog<void>(
         context: context,
+        barrierColor: Colors.black54,
         builder: (dialogContext) {
-          return AlertDialog(
-            title: Text('Comment for $exerciseName'),
-            content: Text(trimmed),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Close'),
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 40,
+              vertical: 24,
+            ),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 280, maxHeight: 200),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2C),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-            ],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  trimmed,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withOpacity(0.95),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
           );
         },
       );

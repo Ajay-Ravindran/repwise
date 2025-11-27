@@ -50,6 +50,7 @@ class RepwiseHome extends StatefulWidget {
 
 class _RepwiseHomeState extends State<RepwiseHome> {
   int _selectedIndex = 0;
+  late PageController _pageController;
   static const MethodChannel _widgetChannel = MethodChannel(
     'com.example.repwise/workout_widget',
   );
@@ -63,7 +64,14 @@ class _RepwiseHomeState extends State<RepwiseHome> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _selectedIndex);
     _configureWidgetChannel();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _configureWidgetChannel() async {
@@ -109,7 +117,10 @@ class _RepwiseHomeState extends State<RepwiseHome> {
       return;
     }
 
-    setState(() => _selectedIndex = 1);
+    setState(() {
+      _selectedIndex = 1;
+      _pageController.jumpToPage(1);
+    });
 
     if (!wasActive) {
       ScaffoldMessenger.of(
@@ -118,16 +129,31 @@ class _RepwiseHomeState extends State<RepwiseHome> {
     }
   }
 
+  void _onPageChanged(int index) {
+    setState(() => _selectedIndex = index);
+  }
+
+  void _onNavigationTapped(int index) {
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: IndexedStack(index: _selectedIndex, children: _screens),
+        child: PageView(
+          controller: _pageController,
+          onPageChanged: _onPageChanged,
+          children: _screens,
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _selectedIndex = index),
+        onDestinationSelected: _onNavigationTapped,
         destinations: const <NavigationDestination>[
           NavigationDestination(
             icon: Icon(Icons.category_outlined),

@@ -2189,18 +2189,47 @@ class _SetRow extends StatelessWidget {
       if (commentText == null || commentText.isEmpty) {
         return;
       }
+      final theme = Theme.of(context);
       showDialog<void>(
         context: context,
+        barrierColor: Colors.black54,
         builder: (dialogContext) {
-          return AlertDialog(
-            title: Text('Comment for ${exercise.name}'),
-            content: Text(commentText),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Close'),
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 40,
+              vertical: 24,
+            ),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 280, maxHeight: 200),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2C),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-            ],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  commentText,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withOpacity(0.95),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
           );
         },
       );

@@ -986,22 +986,28 @@ class RepwiseProvider extends ChangeNotifier {
 
     // Find PR for max weight
     // If multiple sets have max weight, pick the one with most reps
+    // If reps are tied, pick the one with most half reps
     // If still tied, pick the earliest
     String? maxWeightSetId;
     var maxWeightBestReps = 0;
+    var maxWeightBestHalfReps = 0;
     DateTime? maxWeightEarliestTime;
 
     for (final record in allSets) {
       final weight = record.entry.weight ?? 0;
       final reps = record.entry.reps ?? 0;
+      final halfReps = record.entry.halfReps ?? 0;
 
       if (weight == maxWeight) {
         if (maxWeightSetId == null ||
             reps > maxWeightBestReps ||
+            (reps == maxWeightBestReps && halfReps > maxWeightBestHalfReps) ||
             (reps == maxWeightBestReps &&
+                halfReps == maxWeightBestHalfReps &&
                 record.set.timestamp.isBefore(maxWeightEarliestTime!))) {
           maxWeightSetId = record.set.id;
           maxWeightBestReps = reps;
+          maxWeightBestHalfReps = halfReps;
           maxWeightEarliestTime = record.set.timestamp;
         }
       }
@@ -1009,22 +1015,28 @@ class RepwiseProvider extends ChangeNotifier {
 
     // Find PR for max reps
     // If multiple sets have max reps, pick the one with most weight
+    // If weight is tied, pick the one with most half reps
     // If still tied, pick the earliest
     String? maxRepsSetId;
     var maxRepsBestWeight = 0.0;
+    var maxRepsBestHalfReps = 0;
     DateTime? maxRepsEarliestTime;
 
     for (final record in allSets) {
       final weight = record.entry.weight ?? 0;
       final reps = record.entry.reps ?? 0;
+      final halfReps = record.entry.halfReps ?? 0;
 
       if (reps == maxReps) {
         if (maxRepsSetId == null ||
             weight > maxRepsBestWeight ||
+            (weight == maxRepsBestWeight && halfReps > maxRepsBestHalfReps) ||
             (weight == maxRepsBestWeight &&
+                halfReps == maxRepsBestHalfReps &&
                 record.set.timestamp.isBefore(maxRepsEarliestTime!))) {
           maxRepsSetId = record.set.id;
           maxRepsBestWeight = weight;
+          maxRepsBestHalfReps = halfReps;
           maxRepsEarliestTime = record.set.timestamp;
         }
       }
