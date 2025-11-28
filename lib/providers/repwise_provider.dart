@@ -840,6 +840,101 @@ class RepwiseProvider extends ChangeNotifier {
     return true;
   }
 
+  /// Update a set in a completed session
+  bool updateSetInCompletedSession({
+    required String sessionId,
+    required String exerciseLogId,
+    required String setId,
+    required List<WorkoutSetEntry> entries,
+  }) {
+    final sessionIndex = _completedSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (sessionIndex == -1) {
+      return false;
+    }
+    final session = _completedSessions[sessionIndex];
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final group = muscleGroupById(exercise.muscleGroupId);
+    if (group == null) {
+      return false;
+    }
+    final allowedIds = group.exercises.map((exercise) => exercise.id).toSet();
+    final validEntries = entries
+        .where(
+          (entry) => entry.hasMetrics && allowedIds.contains(entry.exerciseId),
+        )
+        .toList(growable: false);
+    if (validEntries.isEmpty) {
+      return false;
+    }
+    final setIndex = exercise.sets.indexWhere((set) => set.id == setId);
+    if (setIndex == -1) {
+      return false;
+    }
+    final existing = exercise.sets[setIndex];
+    exercise.sets[setIndex] = WorkoutSet(
+      id: existing.id,
+      muscleGroupId: exercise.muscleGroupId,
+      entries: validEntries,
+      timestamp: existing.timestamp,
+    );
+    // Update exercise IDs if new exercises are added
+    final newIds = validEntries
+        .map((entry) => entry.exerciseId)
+        .where((id) => !exercise.exerciseIds.contains(id))
+        .toSet();
+    if (newIds.isNotEmpty) {
+      exercise.exerciseIds.addAll(newIds);
+    }
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
+  /// Remove a set from a completed session
+  bool removeSetFromCompletedSession({
+    required String sessionId,
+    required String exerciseLogId,
+    required String setId,
+  }) {
+    final sessionIndex = _completedSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (sessionIndex == -1) {
+      return false;
+    }
+    final session = _completedSessions[sessionIndex];
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final setIndex = exercise.sets.indexWhere((set) => set.id == setId);
+    if (setIndex == -1) {
+      return false;
+    }
+    exercise.sets.removeAt(setIndex);
+    // Remove exercise if no sets remain
+    if (exercise.sets.isEmpty) {
+      final exerciseIndex = session.exercises.indexWhere(
+        (ex) => ex.id == exerciseLogId,
+      );
+      if (exerciseIndex != -1) {
+        session.exercises.removeAt(exerciseIndex);
+      }
+    }
+    // Remove session if no exercises remain
+    if (session.exercises.isEmpty) {
+      _completedSessions.removeAt(sessionIndex);
+    }
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
   Exercise? exerciseById(String id) {
     for (final group in _muscleGroups) {
       for (final exercise in group.exercises) {

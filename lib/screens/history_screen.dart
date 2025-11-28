@@ -95,6 +95,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Auto-Filter'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          actionsPadding: const EdgeInsets.only(right: 16, bottom: 0),
           content: const Text(
             'When enabled, the History screen automatically filters by the muscle group of your current active exercise. This helps you quickly compare previous logs while working out.',
           ),
@@ -705,6 +707,7 @@ class _SessionCard extends StatelessWidget {
         _ExerciseHistorySection(
           log: log,
           provider: provider,
+          sessionId: session.id,
           showMuscleGroup: false,
         ),
       );
@@ -722,11 +725,13 @@ class _ExerciseHistorySection extends StatelessWidget {
   const _ExerciseHistorySection({
     required this.log,
     required this.provider,
+    required this.sessionId,
     this.showMuscleGroup = true,
   });
 
   final WorkoutExerciseLog log;
   final RepwiseProvider provider;
+  final String sessionId;
   final bool showMuscleGroup;
 
   @override
@@ -769,6 +774,8 @@ class _ExerciseHistorySection extends StatelessWidget {
                   set: log.sets[i],
                   setNumber: i + 1,
                   provider: provider,
+                  sessionId: sessionId,
+                  exerciseLogId: log.id,
                 ),
             ],
           ),
@@ -796,11 +803,15 @@ class _WorkoutSetTile extends StatefulWidget {
     required this.set,
     required this.setNumber,
     required this.provider,
+    required this.sessionId,
+    required this.exerciseLogId,
   });
 
   final WorkoutSet set;
   final int setNumber;
   final RepwiseProvider provider;
+  final String sessionId;
+  final String exerciseLogId;
 
   @override
   State<_WorkoutSetTile> createState() => _WorkoutSetTileState();
@@ -910,8 +921,8 @@ class _WorkoutSetTileState extends State<_WorkoutSetTile> {
                 constraints: const BoxConstraints(maxHeight: 48),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(
-                    0.5,
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
                   ),
                   borderRadius: BorderRadius.circular(6),
                 ),
@@ -970,8 +981,8 @@ class _WorkoutSetTileState extends State<_WorkoutSetTile> {
               constraints: const BoxConstraints(maxHeight: 48),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withOpacity(
-                  0.5,
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
                 ),
                 borderRadius: BorderRadius.circular(6),
               ),
@@ -994,9 +1005,12 @@ class _WorkoutSetTileState extends State<_WorkoutSetTile> {
       }
     }
 
+    // Make the tile clickable
+    Widget tileContent;
+
     // For superset, use a different layout with set number on its own line
     if (widget.set.entries.length > 1) {
-      return Container(
+      tileContent = Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           border: Border(
@@ -1040,54 +1054,164 @@ class _WorkoutSetTileState extends State<_WorkoutSetTile> {
           ),
         ),
       );
-    }
-
-    // For single exercise, keep the original horizontal layout
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: theme.colorScheme.outlineVariant, width: 2),
+    } else {
+      // For single exercise, keep the original horizontal layout
+      tileContent = Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: theme.colorScheme.outlineVariant, width: 2),
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 60,
-              child: Row(
-                children: [
-                  Text(
-                    'Set ${widget.setNumber}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (isPRSet)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Icon(
-                        Icons.emoji_events,
-                        size: 16,
-                        color: theme.colorScheme.primary,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 60,
+                child: Row(
+                  children: [
+                    Text(
+                      'Set ${widget.setNumber}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: entryWidgets,
+                    if (isPRSet)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Icon(
+                          Icons.emoji_events,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              Expanded(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: entryWidgets,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _showSetEditDialog(context),
+      child: tileContent,
+    );
+  }
+
+  void _showSetEditDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('Set ${widget.setNumber}'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          actionsAlignment: MainAxisAlignment.center,
+          content: const Text('What would you like to do with this set?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _editSet(context);
+              },
+              child: const Text('Edit'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showDeleteConfirmation(context);
+              },
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Set'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          actionsPadding: const EdgeInsets.only(right: 16, bottom: 4),
+          content: const Text(
+            'Are you sure you want to delete this set? This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _deleteSet(context);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _editSet(BuildContext context) {
+    // Create a dummy exercise log for the edit dialog
+    final dummyExerciseLog = WorkoutExerciseLog(
+      id: widget.exerciseLogId,
+      muscleGroupId: widget.set.muscleGroupId,
+      exerciseIds: widget.set.entries.map((e) => e.exerciseId).toList(),
+      sets: [widget.set],
+    );
+
+    showHistorySetEditDialog(
+      context,
+      exerciseLog: dummyExerciseLog,
+      initialSet: widget.set,
+      sessionId: widget.sessionId,
+      exerciseLogId: widget.exerciseLogId,
+    );
+  }
+
+  void _deleteSet(BuildContext context) {
+    final success = widget.provider.removeSetFromCompletedSession(
+      sessionId: widget.sessionId,
+      exerciseLogId: widget.exerciseLogId,
+      setId: widget.set.id,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? 'Set deleted successfully' : 'Failed to delete set',
+        ),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 200,
+          left: 16,
+          right: 16,
         ),
       ),
     );
@@ -1108,4 +1232,562 @@ class _EmptyHistoryState extends StatelessWidget {
       ),
     );
   }
+}
+
+// Helper class for set entry draft
+class _DraftSetEntry {
+  _DraftSetEntry({required this.id, this.exerciseId});
+
+  final String id;
+  String? exerciseId;
+  String reps = '';
+  String weight = '';
+  String distance = '';
+  String time = '';
+  String halfReps = '';
+  String comment = '';
+}
+
+// Function to show the edit dialog for history sets
+void showHistorySetEditDialog(
+  BuildContext context, {
+  required WorkoutExerciseLog exerciseLog,
+  required WorkoutSet initialSet,
+  required String sessionId,
+  required String exerciseLogId,
+}) {
+  final rootContext = context;
+  final provider = rootContext.read<RepwiseProvider>();
+
+  final group = provider.muscleGroupById(exerciseLog.muscleGroupId);
+  if (group == null) {
+    ScaffoldMessenger.of(rootContext).showSnackBar(
+      const SnackBar(
+        content: Text('Muscle group for this exercise is missing'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return;
+  }
+
+  final Map<String, Exercise> exercisesById = <String, Exercise>{
+    for (final exercise in group.exercises) exercise.id: exercise,
+  };
+  for (final id in exerciseLog.exerciseIds) {
+    final cached = provider.exerciseById(id);
+    if (cached != null) {
+      exercisesById.putIfAbsent(id, () => cached);
+    }
+  }
+
+  var draftCounter = 0;
+  String nextDraftId() => 'draft_${draftCounter++}';
+  final List<_DraftSetEntry> drafts = <_DraftSetEntry>[];
+
+  // Pre-populate from the existing set
+  for (final entry in initialSet.entries) {
+    final draft = _DraftSetEntry(
+      id: nextDraftId(),
+      exerciseId: entry.exerciseId,
+    );
+    if (entry.reps != null) {
+      draft.reps = entry.reps!.toString();
+    }
+    if (entry.weight != null) {
+      draft.weight = _formatNumberToString(entry.weight!);
+    }
+    if (entry.distance != null) {
+      draft.distance = _formatNumberToString(entry.distance!);
+    }
+    if (entry.duration != null) {
+      draft.time = entry.duration!.inSeconds.toString();
+    }
+    if (entry.halfReps != null && entry.halfReps! > 0) {
+      draft.halfReps = entry.halfReps!.toString();
+    }
+    draft.comment = entry.comment ?? '';
+    drafts.add(draft);
+  }
+
+  if (drafts.isEmpty) {
+    drafts.add(_DraftSetEntry(id: nextDraftId()));
+  }
+
+  String? validationError;
+
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheetContext) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 24,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+        ),
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            Exercise? resolveExercise(String? exerciseId) {
+              if (exerciseId == null) {
+                return null;
+              }
+              return exercisesById[exerciseId] ??
+                  provider.exerciseById(exerciseId);
+            }
+
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Edit Set',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(label: Text(group.name)),
+                      if (exerciseLog.isSuperset)
+                        const Chip(label: Text('Superset')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...drafts.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final draft = entry.value;
+                    final exercise = resolveExercise(draft.exerciseId);
+                    final bool canRemove = drafts.length > 1;
+                    final bool isMissingExercise =
+                        draft.exerciseId != null && exercise == null;
+
+                    return Card(
+                      key: ValueKey(draft.id),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    initialValue: draft.exerciseId,
+                                    decoration: InputDecoration(
+                                      labelText: drafts.length > 1
+                                          ? 'Exercise ${index + 1}'
+                                          : 'Exercise',
+                                      border: const OutlineInputBorder(),
+                                      errorText: isMissingExercise
+                                          ? 'Exercise not found'
+                                          : null,
+                                    ),
+                                    items: exercisesById.entries
+                                        .map(
+                                          (entry) => DropdownMenuItem<String>(
+                                            value: entry.key,
+                                            child: Text(entry.value.name),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (exerciseId) {
+                                      setState(() {
+                                        draft.exerciseId = exerciseId;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                if (canRemove) ...[
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        drafts.removeAt(index);
+                                      });
+                                    },
+                                    icon: const Icon(Icons.remove_circle),
+                                    tooltip: 'Remove exercise',
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (exercise != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      exercise.unit.label,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelLarge,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ..._buildExerciseInputs(
+                                      context,
+                                      exercise,
+                                      draft,
+                                      provider,
+                                      setState,
+                                      validationError,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.add),
+                      title: const Text('Add Exercise'),
+                      onTap: () {
+                        setState(() {
+                          drafts.add(_DraftSetEntry(id: nextDraftId()));
+                        });
+                      },
+                    ),
+                  ),
+                  if (validationError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        validationError!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            // Define showError function
+                            void showError(String message) {
+                              setState(() {
+                                validationError = message;
+                              });
+                            }
+
+                            final entries = <WorkoutSetEntry>[];
+                            for (final draft in drafts) {
+                              final exerciseId = draft.exerciseId;
+                              if (exerciseId == null) {
+                                showError('Please select an exercise.');
+                                return;
+                              }
+                              final exercise = exercisesById[exerciseId];
+                              if (exercise == null) {
+                                showError('Invalid exercise selected.');
+                                return;
+                              }
+
+                              final reps = _parseIntOrNull(draft.reps);
+                              final weight = _parseDoubleOrNull(draft.weight);
+                              final distance = _parseDoubleOrNull(
+                                draft.distance,
+                              );
+                              final duration = _parseDurationOrNull(draft.time);
+                              final halfReps = _parseIntOrNull(draft.halfReps);
+                              final trimmedComment = draft.comment.trim();
+
+                              entries.add(
+                                WorkoutSetEntry(
+                                  exerciseId: exerciseId,
+                                  unit: exercise.unit,
+                                  reps: reps,
+                                  weight: weight,
+                                  distance: distance,
+                                  duration: duration,
+                                  halfReps: halfReps,
+                                  comment: trimmedComment.isEmpty
+                                      ? null
+                                      : trimmedComment,
+                                ),
+                              );
+                            }
+
+                            final success = provider
+                                .updateSetInCompletedSession(
+                                  sessionId: sessionId,
+                                  exerciseLogId: exerciseLogId,
+                                  setId: initialSet.id,
+                                  entries: entries,
+                                );
+
+                            if (!success) {
+                              showError('Unable to update this set.');
+                              return;
+                            }
+
+                            Navigator.of(sheetContext).pop();
+                            ScaffoldMessenger.of(rootContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Set updated successfully'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                          child: const Text('Update Set'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
+// Helper function to format numbers for display
+String _formatNumberToString(double number) {
+  if (number == number.roundToDouble()) {
+    return number.round().toString();
+  }
+  return number.toString();
+}
+
+// Helper functions for parsing input
+int? _parseIntOrNull(String value) {
+  if (value.trim().isEmpty) return null;
+  return int.tryParse(value.trim());
+}
+
+double? _parseDoubleOrNull(String value) {
+  if (value.trim().isEmpty) return null;
+  return double.tryParse(value.trim());
+}
+
+Duration? _parseDurationOrNull(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return null;
+  final seconds = int.tryParse(trimmed);
+  if (seconds == null || seconds <= 0) return null;
+  return Duration(seconds: seconds);
+}
+
+// Function to build exercise input fields (matching workout screen style)
+List<Widget> _buildExerciseInputs(
+  BuildContext context,
+  Exercise exercise,
+  _DraftSetEntry draft,
+  RepwiseProvider provider,
+  void Function(void Function()) setState,
+  String? validationError,
+) {
+  Widget buildField({
+    required String label,
+    required String fieldKey,
+    required String initialValue,
+    TextInputType keyboardType = const TextInputType.numberWithOptions(
+      decimal: true,
+    ),
+    required void Function(String) onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextFormField(
+        key: ValueKey('${draft.id}-$fieldKey-${exercise.id}'),
+        initialValue: initialValue,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+        onChanged: (value) {
+          setState(() {
+            onChanged(value);
+          });
+        },
+      ),
+    );
+  }
+
+  Widget buildCommentField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: TextFormField(
+        key: ValueKey('${draft.id}-comment-${exercise.id}'),
+        initialValue: draft.comment,
+        minLines: 1,
+        maxLines: 3,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          labelText: 'Comment (optional)',
+          alignLabelWithHint: true,
+          border: OutlineInputBorder(),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        onChanged: (value) {
+          setState(() {
+            draft.comment = value;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget buildHalfRepsField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 160),
+        child: TextFormField(
+          key: ValueKey('${draft.id}-halfReps-${exercise.id}'),
+          initialValue: draft.halfReps,
+          keyboardType: const TextInputType.numberWithOptions(decimal: false),
+          decoration: const InputDecoration(
+            labelText: 'Half reps',
+            border: OutlineInputBorder(),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+          onChanged: (value) {
+            setState(() {
+              draft.halfReps = value;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget buildRepsRow() {
+    final repsField = buildField(
+      label: 'Reps',
+      fieldKey: 'reps',
+      initialValue: draft.reps,
+      keyboardType: const TextInputType.numberWithOptions(decimal: false),
+      onChanged: (value) => draft.reps = value,
+    );
+    // Show half reps field if enabled in settings
+    if (!provider.halfRepsEnabled) {
+      return repsField;
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: repsField),
+        const SizedBox(width: 12),
+        buildHalfRepsField(),
+      ],
+    );
+  }
+
+  final List<Widget> fields = <Widget>[];
+
+  switch (exercise.unit) {
+    case ExerciseUnit.weightReps:
+      fields
+        ..add(
+          buildField(
+            label: 'Weight (${provider.weightUnit})',
+            fieldKey: 'weight',
+            initialValue: draft.weight,
+            onChanged: (value) => draft.weight = value,
+          ),
+        )
+        ..add(buildRepsRow());
+      break;
+    case ExerciseUnit.reps:
+      fields.add(buildRepsRow());
+      break;
+    case ExerciseUnit.time:
+      fields.add(
+        buildField(
+          label: 'Time (seconds)',
+          fieldKey: 'time',
+          initialValue: draft.time,
+          keyboardType: const TextInputType.numberWithOptions(decimal: false),
+          onChanged: (value) => draft.time = value,
+        ),
+      );
+      break;
+    case ExerciseUnit.distanceTime:
+      fields
+        ..add(
+          buildField(
+            label: 'Distance (${provider.distanceUnit})',
+            fieldKey: 'distance',
+            initialValue: draft.distance,
+            onChanged: (value) => draft.distance = value,
+          ),
+        )
+        ..add(
+          buildField(
+            label: 'Time (seconds)',
+            fieldKey: 'time',
+            initialValue: draft.time,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            onChanged: (value) => draft.time = value,
+          ),
+        );
+      break;
+    case ExerciseUnit.repsTime:
+      fields
+        ..add(buildRepsRow())
+        ..add(
+          buildField(
+            label: 'Time (seconds)',
+            fieldKey: 'time',
+            initialValue: draft.time,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            onChanged: (value) => draft.time = value,
+          ),
+        );
+      break;
+    case ExerciseUnit.distance:
+      fields.add(
+        buildField(
+          label: 'Distance (${provider.distanceUnit})',
+          fieldKey: 'distance',
+          initialValue: draft.distance,
+          onChanged: (value) => draft.distance = value,
+        ),
+      );
+      break;
+  }
+
+  // Add comment field if enabled in settings
+  if (provider.commentsEnabled) {
+    fields.add(buildCommentField());
+  }
+  return fields;
 }

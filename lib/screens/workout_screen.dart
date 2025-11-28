@@ -236,7 +236,7 @@ class WorkoutScreen extends StatefulWidget {
                                   margin: EdgeInsets.only(
                                     bottom:
                                         MediaQuery.of(rootContext).size.height -
-                                        120,
+                                        250,
                                     left: 16,
                                     right: 16,
                                   ),
@@ -2261,8 +2261,8 @@ class _SetRowState extends State<_SetRow> {
                 constraints: const BoxConstraints(maxHeight: 48),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(
-                    0.5,
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
                   ),
                   borderRadius: BorderRadius.circular(6),
                 ),
