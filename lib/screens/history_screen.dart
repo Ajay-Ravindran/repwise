@@ -26,14 +26,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final Set<String> _selectedMuscleGroupIds = <String>{};
 
   static final List<Color> _palette = <Color>[
-    const Color(0xFF80CBC4),
-    const Color(0xFFFFAB91),
-    const Color(0xFFAED581),
-    const Color(0xFF81D4FA),
-    const Color(0xFFF48FB1),
-    const Color(0xFFFFF176),
-    const Color(0xFFE6EE9C),
-    const Color(0xFFCE93D8),
+    const Color(0xFF80CBC4), // Teal
+    const Color(0xFFFFAB91), // Peach
+    const Color(0xFF81D4FA), // Light Blue
+    const Color(0xFFF48FB1), // Pink
+    const Color(0xFFCE93D8), // Purple
+    const Color(0xFFFFCC80), // Orange
+    const Color(0xFFA5D6A7), // Green
+    const Color(0xFF9FA8DA), // Indigo
+    const Color(0xFFFFF59D), // Yellow
+    const Color(0xFFBCAAA4), // Brown
+    const Color(0xFFB0BEC5), // Blue Grey
+    const Color(0xFF90CAF9), // Blue
+    const Color(0xFFC5E1A5), // Light Green
+    const Color(0xFFEF9A9A), // Red
+    const Color(0xFFFFAB40), // Deep Orange
+    const Color(0xFFBA68C8), // Deep Purple
   ];
 
   @override
@@ -313,11 +321,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   if (events.isEmpty) {
                     return const SizedBox.shrink();
                   }
-                  final muscleNames = _muscleGroupsForEvents(
+                  final muscleGroupIds = _muscleGroupIdsForEvents(
                     events.cast<WorkoutSession>(),
-                    provider,
                   ).toList(growable: false);
-                  if (muscleNames.isEmpty) {
+                  if (muscleGroupIds.isEmpty) {
                     return const SizedBox.shrink();
                   }
                   return Align(
@@ -328,14 +335,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         alignment: WrapAlignment.center,
                         spacing: 2,
                         runSpacing: 2,
-                        children: muscleNames
+                        children: muscleGroupIds
                             .take(4)
                             .map(
-                              (name) => Container(
+                              (id) => Container(
                                 width: 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: _colorForName(name),
+                                  color: _colorForMuscleGroup(id),
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -369,7 +376,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     selected: isSelected,
                     label: Text(group.name),
                     avatar: CircleAvatar(
-                      backgroundColor: _colorForName(group.name),
+                      backgroundColor: _colorForMuscleGroup(group.id),
                       radius: 10,
                     ),
                     onSelected: (selected) {
@@ -438,7 +445,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: _SessionCard(
                 session: session,
                 provider: provider,
-                paletteResolver: _colorForName,
                 selectedMuscleGroupIds: _selectedMuscleGroupIds,
               ),
             );
@@ -488,10 +494,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return names;
   }
 
-  static Color _colorForName(String name) {
-    final normalized = name.toLowerCase();
-    final hash = normalized.codeUnits.fold<int>(0, (prev, unit) => prev + unit);
-    return _palette[hash % _palette.length];
+  Set<String> _muscleGroupIdsForEvents(Iterable<WorkoutSession> sessions) {
+    final Set<String> ids = <String>{};
+    for (final session in sessions) {
+      for (final exercise in session.exercises) {
+        if (exercise.hasSets) {
+          ids.add(exercise.muscleGroupId);
+        }
+      }
+    }
+    return ids;
+  }
+
+  Color _colorForMuscleGroup(String muscleGroupId) {
+    final provider = context.read<RepwiseProvider>();
+    final index = provider.muscleGroups.indexWhere(
+      (group) => group.id == muscleGroupId,
+    );
+    if (index == -1) {
+      return Colors.grey;
+    }
+    return _palette[index % _palette.length];
   }
 }
 
@@ -520,21 +543,30 @@ class _SelectedDaySummary extends StatelessWidget {
             if (muscleGroupNames.isEmpty)
               const Text('No muscle groups logged.')
             else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: muscleGroupNames
-                    .map(
-                      (name) => Chip(
-                        avatar: CircleAvatar(
-                          backgroundColor: _HistoryScreenState._colorForName(
-                            name,
-                          ),
-                        ),
+              Consumer<RepwiseProvider>(
+                builder: (context, provider, _) {
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: muscleGroupNames.map((name) {
+                      final group = provider.muscleGroups.firstWhere(
+                        (g) => g.name == name,
+                        orElse: () => MuscleGroup(id: '', name: name),
+                      );
+                      final index = provider.muscleGroups.indexWhere(
+                        (g) => g.id == group.id,
+                      );
+                      final color = index == -1
+                          ? Colors.grey
+                          : _HistoryScreenState._palette[index %
+                                _HistoryScreenState._palette.length];
+                      return Chip(
+                        avatar: CircleAvatar(backgroundColor: color),
                         label: Text(name),
-                      ),
-                    )
-                    .toList(),
+                      );
+                    }).toList(),
+                  );
+                },
               ),
           ],
         ),
@@ -584,14 +616,23 @@ class _SessionCard extends StatelessWidget {
   const _SessionCard({
     required this.session,
     required this.provider,
-    required this.paletteResolver,
     required this.selectedMuscleGroupIds,
   });
 
   final WorkoutSession session;
   final RepwiseProvider provider;
-  final Color Function(String) paletteResolver;
   final Set<String> selectedMuscleGroupIds;
+
+  Color _getColorForMuscleGroup(String muscleGroupId) {
+    final index = provider.muscleGroups.indexWhere(
+      (group) => group.id == muscleGroupId,
+    );
+    if (index == -1) {
+      return Colors.grey;
+    }
+    return _HistoryScreenState._palette[index %
+        _HistoryScreenState._palette.length];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -685,7 +726,7 @@ class _SessionCard extends StatelessWidget {
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
                     color: muscleGroup != null
-                        ? paletteResolver(muscleGroup.name)
+                        ? _getColorForMuscleGroup(muscleGroup.id)
                         : Colors.grey,
                     shape: BoxShape.circle,
                   ),
@@ -1455,16 +1496,14 @@ void showHistorySetEditDialog(
                       ),
                     );
                   }),
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.add),
-                      title: const Text('Add Exercise'),
-                      onTap: () {
-                        setState(() {
-                          drafts.add(_DraftSetEntry(id: nextDraftId()));
-                        });
-                      },
-                    ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        drafts.add(_DraftSetEntry(id: nextDraftId()));
+                      });
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add another exercise entry'),
                   ),
                   if (validationError != null)
                     Padding(
@@ -1782,6 +1821,26 @@ List<Widget> _buildExerciseInputs(
           onChanged: (value) => draft.distance = value,
         ),
       );
+      break;
+    case ExerciseUnit.weightTime:
+      fields
+        ..add(
+          buildField(
+            label: 'Weight (${provider.weightUnit})',
+            fieldKey: 'weight',
+            initialValue: draft.weight,
+            onChanged: (value) => draft.weight = value,
+          ),
+        )
+        ..add(
+          buildField(
+            label: 'Time (seconds)',
+            fieldKey: 'time',
+            initialValue: draft.time,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            onChanged: (value) => draft.time = value,
+          ),
+        );
       break;
   }
 

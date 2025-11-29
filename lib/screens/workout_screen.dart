@@ -650,6 +650,28 @@ class WorkoutScreen extends StatefulWidget {
                       ),
                     );
                     break;
+                  case ExerciseUnit.weightTime:
+                    fields
+                      ..add(
+                        buildField(
+                          label: 'Weight (${provider.weightUnit})',
+                          fieldKey: 'weight',
+                          initialValue: draft.weight,
+                          onChanged: (value) => draft.weight = value,
+                        ),
+                      )
+                      ..add(
+                        buildField(
+                          label: 'Time (seconds)',
+                          fieldKey: 'time',
+                          initialValue: draft.time,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: false,
+                          ),
+                          onChanged: (value) => draft.time = value,
+                        ),
+                      );
+                    break;
                 }
 
                 // Add comment field if enabled in settings
@@ -980,6 +1002,16 @@ class WorkoutScreen extends StatefulWidget {
                               if (distance == null) {
                                 showError(
                                   'Enter distance for ${exercise.name}.',
+                                );
+                                return;
+                              }
+                              break;
+                            case ExerciseUnit.weightTime:
+                              weight = parsePositiveDouble(draft.weight);
+                              duration = parsePositiveDuration(draft.time);
+                              if (weight == null || duration == null) {
+                                showError(
+                                  'Enter weight and time for ${exercise.name}.',
                                 );
                                 return;
                               }

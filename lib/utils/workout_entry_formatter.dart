@@ -41,6 +41,15 @@ String formatWorkoutEntry(
     case ExerciseUnit.distance:
       parts.add(_formatDouble(entry.distance, suffix: distanceUnit));
       break;
+    case ExerciseUnit.weightTime:
+      parts.addAll(
+        _formatCombined(
+          _formatDouble(entry.weight, suffix: weightUnit),
+          _formatDuration(entry.duration),
+          joiner: ' for ',
+        ),
+      );
+      break;
   }
 
   final halfRepsText = _formatHalfReps(entry.halfReps);

@@ -1,4 +1,12 @@
-enum ExerciseUnit { weightReps, reps, time, distanceTime, repsTime, distance }
+enum ExerciseUnit {
+  weightReps,
+  reps,
+  time,
+  distanceTime,
+  repsTime,
+  distance,
+  weightTime,
+}
 
 extension ExerciseUnitX on ExerciseUnit {
   String get label {
@@ -15,6 +23,8 @@ extension ExerciseUnitX on ExerciseUnit {
         return 'Reps & Time';
       case ExerciseUnit.distance:
         return 'Distance';
+      case ExerciseUnit.weightTime:
+        return 'Weight & Time';
     }
   }
 

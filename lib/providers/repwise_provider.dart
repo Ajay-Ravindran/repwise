@@ -1064,6 +1064,14 @@ class RepwiseProvider extends ChangeNotifier {
           (entry) => entry.distance ?? 0,
         );
         break;
+      case ExerciseUnit.weightTime:
+        _findPRsForTwoMetrics(
+          allSets,
+          prSetIds,
+          (entry) => entry.weight ?? 0,
+          (entry) => entry.duration?.inSeconds ?? 0,
+        );
+        break;
     }
 
     return prSetIds;
