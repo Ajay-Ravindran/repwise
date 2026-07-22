@@ -103,6 +103,62 @@ class RepwiseProvider extends ChangeNotifier {
     );
   }
 
+  /// Returns the most-recent date strictly before [before] that has a
+  /// logged workout. If [muscleGroupIds] is non-empty, only days where at
+  /// least one exercise with a set matches a given muscle group are returned.
+  DateTime? previousWorkoutDay(
+    DateTime before, {
+    Set<String> muscleGroupIds = const {},
+  }) {
+    final beforeDate = _dateOnly(before);
+    // _completedSessions is stored newest-first, so the first match is the answer.
+    for (final session in _completedSessions) {
+      final sessionDate = _dateOnly(session.startedAt);
+      if (!sessionDate.isBefore(beforeDate)) {
+        continue;
+      }
+      if (_sessionMatchesMuscleGroups(session, muscleGroupIds)) {
+        return sessionDate;
+      }
+    }
+    return null;
+  }
+
+  /// Returns the earliest date strictly after [after] that has a logged
+  /// workout. If [muscleGroupIds] is non-empty, only matching days are returned.
+  DateTime? nextWorkoutDay(
+    DateTime after, {
+    Set<String> muscleGroupIds = const {},
+  }) {
+    final afterDate = _dateOnly(after);
+    DateTime? result;
+    for (final session in _completedSessions) {
+      final sessionDate = _dateOnly(session.startedAt);
+      if (!sessionDate.isAfter(afterDate)) {
+        continue;
+      }
+      if (!_sessionMatchesMuscleGroups(session, muscleGroupIds)) {
+        continue;
+      }
+      if (result == null || sessionDate.isBefore(result)) {
+        result = sessionDate;
+      }
+    }
+    return result;
+  }
+
+  bool _sessionMatchesMuscleGroups(
+    WorkoutSession session,
+    Set<String> muscleGroupIds,
+  ) {
+    if (muscleGroupIds.isEmpty) {
+      return session.exercises.any((ex) => ex.hasSets);
+    }
+    return session.exercises.any(
+      (ex) => ex.hasSets && muscleGroupIds.contains(ex.muscleGroupId),
+    );
+  }
+
   Future<void> initialize() async {
     if (_initialized) {
       return;
@@ -199,10 +255,12 @@ class RepwiseProvider extends ChangeNotifier {
     if (value is! List) {
       return <WorkoutSession>[];
     }
-    return value
+    final sessions = value
         .whereType<Map<String, dynamic>>()
         .map(WorkoutSession.fromJson)
         .toList();
+    sessions.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    return sessions;
   }
 
   void _resetTimerState() {
