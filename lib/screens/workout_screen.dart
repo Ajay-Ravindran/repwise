@@ -403,7 +403,9 @@ class WorkoutScreen extends StatefulWidget {
           draft.distance = _formatNumberToString(entry.distance!);
         }
         if (entry.duration != null) {
-          draft.time = entry.duration!.inSeconds.toString();
+          final totalSeconds = entry.duration!.inSeconds;
+          draft.minutes = (totalSeconds ~/ 60).toString();
+          draft.seconds = (totalSeconds % 60).toString();
         }
         if (entry.halfReps != null) {
           draft.halfReps = entry.halfReps!.toString();
@@ -549,6 +551,63 @@ class WorkoutScreen extends StatefulWidget {
                   );
                 }
 
+                Widget buildTimeRow() {
+                  Widget timeField({
+                    required String label,
+                    required String fieldKey,
+                    required String initialValue,
+                    required void Function(String) onChanged,
+                  }) {
+                    return TextFormField(
+                      key: ValueKey('${draft.id}-$fieldKey-${exercise.id}'),
+                      initialValue: initialValue,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: false,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: label,
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          onChanged(value);
+                          validationError = null;
+                        });
+                      },
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: timeField(
+                            label: 'Minutes',
+                            fieldKey: 'minutes',
+                            initialValue: draft.minutes,
+                            onChanged: (value) => draft.minutes = value,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: timeField(
+                            label: 'Seconds',
+                            fieldKey: 'seconds',
+                            initialValue: draft.seconds,
+                            onChanged: (value) => draft.seconds = value,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 Widget buildRepsRow() {
                   final repsField = buildField(
                     label: 'Reps',
@@ -592,17 +651,7 @@ class WorkoutScreen extends StatefulWidget {
                     fields.add(buildRepsRow());
                     break;
                   case ExerciseUnit.time:
-                    fields.add(
-                      buildField(
-                        label: 'Time (seconds)',
-                        fieldKey: 'time',
-                        initialValue: draft.time,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: false,
-                        ),
-                        onChanged: (value) => draft.time = value,
-                      ),
-                    );
+                    fields.add(buildTimeRow());
                     break;
                   case ExerciseUnit.distanceTime:
                     fields
@@ -614,32 +663,12 @@ class WorkoutScreen extends StatefulWidget {
                           onChanged: (value) => draft.distance = value,
                         ),
                       )
-                      ..add(
-                        buildField(
-                          label: 'Time (seconds)',
-                          fieldKey: 'time',
-                          initialValue: draft.time,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: false,
-                          ),
-                          onChanged: (value) => draft.time = value,
-                        ),
-                      );
+                      ..add(buildTimeRow());
                     break;
                   case ExerciseUnit.repsTime:
                     fields
                       ..add(buildRepsRow())
-                      ..add(
-                        buildField(
-                          label: 'Time (seconds)',
-                          fieldKey: 'time',
-                          initialValue: draft.time,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: false,
-                          ),
-                          onChanged: (value) => draft.time = value,
-                        ),
-                      );
+                      ..add(buildTimeRow());
                     break;
                   case ExerciseUnit.distance:
                     fields.add(
@@ -661,17 +690,7 @@ class WorkoutScreen extends StatefulWidget {
                           onChanged: (value) => draft.weight = value,
                         ),
                       )
-                      ..add(
-                        buildField(
-                          label: 'Time (seconds)',
-                          fieldKey: 'time',
-                          initialValue: draft.time,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: false,
-                          ),
-                          onChanged: (value) => draft.time = value,
-                        ),
-                      );
+                      ..add(buildTimeRow());
                     break;
                 }
 
@@ -788,7 +807,8 @@ class WorkoutScreen extends StatefulWidget {
                                         draft.reps = '';
                                         draft.weight = '';
                                         draft.distance = '';
-                                        draft.time = '';
+                                        draft.minutes = '';
+                                        draft.seconds = '';
                                         draft.halfReps = '';
                                         draft.comment = '';
                                         validationError = null;
@@ -894,12 +914,32 @@ class WorkoutScreen extends StatefulWidget {
                           return parsed;
                         }
 
-                        Duration? parsePositiveDuration(String value) {
-                          final seconds = parsePositiveInt(value);
-                          if (seconds == null) {
+                        Duration? parsePositiveDuration(
+                          String minutesInput,
+                          String secondsInput,
+                        ) {
+                          int parseNonNegativeInt(String value) {
+                            final trimmed = value.trim();
+                            if (trimmed.isEmpty) {
+                              return 0;
+                            }
+                            final parsed = int.tryParse(trimmed);
+                            if (parsed == null || parsed < 0) {
+                              return -1;
+                            }
+                            return parsed;
+                          }
+
+                          final minutesValue = parseNonNegativeInt(minutesInput);
+                          final secondsValue = parseNonNegativeInt(secondsInput);
+                          if (minutesValue < 0 || secondsValue < 0) {
                             return null;
                           }
-                          return Duration(seconds: seconds);
+                          final totalSeconds = minutesValue * 60 + secondsValue;
+                          if (totalSeconds <= 0) {
+                            return null;
+                          }
+                          return Duration(seconds: totalSeconds);
                         }
 
                         if (drafts.isEmpty) {
@@ -972,7 +1012,10 @@ class WorkoutScreen extends StatefulWidget {
                               }
                               break;
                             case ExerciseUnit.time:
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (duration == null) {
                                 showError('Enter time for ${exercise.name}.');
                                 return;
@@ -980,7 +1023,10 @@ class WorkoutScreen extends StatefulWidget {
                               break;
                             case ExerciseUnit.distanceTime:
                               distance = parsePositiveDouble(draft.distance);
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (distance == null || duration == null) {
                                 showError(
                                   'Enter distance and time for ${exercise.name}.',
@@ -990,7 +1036,10 @@ class WorkoutScreen extends StatefulWidget {
                               break;
                             case ExerciseUnit.repsTime:
                               reps = parsePositiveInt(draft.reps);
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (reps == null || duration == null) {
                                 showError(
                                   'Enter reps and time for ${exercise.name}.',
@@ -1009,7 +1058,10 @@ class WorkoutScreen extends StatefulWidget {
                               break;
                             case ExerciseUnit.weightTime:
                               weight = parsePositiveDouble(draft.weight);
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (weight == null || duration == null) {
                                 showError(
                                   'Enter weight and time for ${exercise.name}.',
@@ -1105,7 +1157,8 @@ class _DraftSetEntry {
   String reps = '';
   String weight = '';
   String distance = '';
-  String time = '';
+  String minutes = '';
+  String seconds = '';
   String halfReps = '';
   String comment = '';
 }
