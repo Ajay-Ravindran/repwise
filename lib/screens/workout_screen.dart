@@ -13,6 +13,7 @@ import '../models/workout.dart';
 import '../providers/repwise_provider.dart';
 import '../utils/workout_entry_formatter.dart';
 import '../widgets/scrollable_metrics_text.dart';
+import 'weight_tracking_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -1516,6 +1517,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           child: Text('Workout', style: Theme.of(context).textTheme.titleLarge),
         ),
         const SizedBox(width: 12),
+        IconButton(
+          tooltip: 'Track weight',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const WeightTrackingScreen(),
+            ),
+          ),
+          icon: const Icon(Icons.monitor_weight_outlined),
+        ),
         if (provider.isTimerActive)
           InkWell(
             onTap: () => _showTimerPopup(context),
