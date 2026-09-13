@@ -109,15 +109,16 @@ class WorkoutScreen extends StatefulWidget {
             top: 24,
             bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
           ),
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              final group = groups.firstWhere(
-                (candidate) => candidate.id == selectedGroupId,
-              );
-              final exercises = group.exercises;
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * 0.85,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                final group = groups.firstWhere(
+                  (candidate) => candidate.id == selectedGroupId,
+                );
+                final exercises = group.exercises;
 
-              return SingleChildScrollView(
-                child: Column(
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
@@ -170,32 +171,36 @@ class WorkoutScreen extends StatefulWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (exercises.isEmpty)
-                      const Text(
-                        'No exercises available for this muscle group yet.',
-                      )
-                    else
-                      Column(
-                        children: exercises.map((exercise) {
-                          final isSelected = selectedExerciseIds.contains(
-                            exercise.id,
-                          );
-                          return CheckboxListTile(
-                            value: isSelected,
-                            onChanged: (checked) {
-                              setState(() {
-                                if (checked ?? false) {
-                                  selectedExerciseIds.add(exercise.id);
-                                } else {
-                                  selectedExerciseIds.remove(exercise.id);
-                                }
-                              });
-                            },
-                            title: Text(exercise.name),
-                            subtitle: Text(exercise.unit.label),
-                          );
-                        }).toList(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: exercises.isEmpty
+                            ? const Text(
+                                'No exercises available for this muscle group yet.',
+                              )
+                            : Column(
+                                children: exercises.map((exercise) {
+                                  final isSelected = selectedExerciseIds
+                                      .contains(exercise.id);
+                                  return CheckboxListTile(
+                                    value: isSelected,
+                                    onChanged: (checked) {
+                                      setState(() {
+                                        if (checked ?? false) {
+                                          selectedExerciseIds.add(exercise.id);
+                                        } else {
+                                          selectedExerciseIds.remove(
+                                            exercise.id,
+                                          );
+                                        }
+                                      });
+                                    },
+                                    title: Text(exercise.name),
+                                    subtitle: Text(exercise.unit.label),
+                                  );
+                                }).toList(),
+                              ),
                       ),
+                    ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
                       onPressed: selectedExerciseIds.isEmpty
@@ -248,9 +253,9 @@ class WorkoutScreen extends StatefulWidget {
                       label: const Text('Add Exercise'),
                     ),
                   ],
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
@@ -930,8 +935,12 @@ class WorkoutScreen extends StatefulWidget {
                             return parsed;
                           }
 
-                          final minutesValue = parseNonNegativeInt(minutesInput);
-                          final secondsValue = parseNonNegativeInt(secondsInput);
+                          final minutesValue = parseNonNegativeInt(
+                            minutesInput,
+                          );
+                          final secondsValue = parseNonNegativeInt(
+                            secondsInput,
+                          );
                           if (minutesValue < 0 || secondsValue < 0) {
                             return null;
                           }
