@@ -109,8 +109,10 @@ class WorkoutScreen extends StatefulWidget {
             top: 24,
             bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
           ),
-          child: SizedBox(
-            height: MediaQuery.of(sheetContext).size.height * 0.85,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
+            ),
             child: StatefulBuilder(
               builder: (context, setState) {
                 final group = groups.firstWhere(
@@ -119,86 +121,105 @@ class WorkoutScreen extends StatefulWidget {
                 final exercises = group.exercises;
 
                 return Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Add Exercise',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Select a muscle group and one or more exercises to add to your workout. '
-                      'Exercises selected together are tracked as a superset.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Muscle group',
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedGroupId,
-                          isExpanded: true,
-                          items: groups
-                              .map(
-                                (group) => DropdownMenuItem<String>(
-                                  value: group.id,
-                                  child: Text(group.name),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null || value == selectedGroupId) {
-                              return;
-                            }
-                            setState(() {
-                              selectedGroupId = value;
-                              // Clear exercise selection when changing muscle groups
-                              selectedExerciseIds.clear();
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
+                    // Everything above the pinned button (header, description,
+                    // dropdown and the exercise checklist) shares a single
+                    // scroll region. This ensures that even if the fixed
+                    // "chrome" grows very tall (e.g. large accessibility text
+                    // scale on a short screen) it can shrink/scroll instead of
+                    // overflowing, while the Add Exercise button below always
+                    // stays pinned and visible without needing to scroll.
+                    Flexible(
                       child: SingleChildScrollView(
-                        child: exercises.isEmpty
-                            ? const Text(
-                                'No exercises available for this muscle group yet.',
-                              )
-                            : Column(
-                                children: exercises.map((exercise) {
-                                  final isSelected = selectedExerciseIds
-                                      .contains(exercise.id);
-                                  return CheckboxListTile(
-                                    value: isSelected,
-                                    onChanged: (checked) {
-                                      setState(() {
-                                        if (checked ?? false) {
-                                          selectedExerciseIds.add(exercise.id);
-                                        } else {
-                                          selectedExerciseIds.remove(
-                                            exercise.id,
-                                          );
-                                        }
-                                      });
-                                    },
-                                    title: Text(exercise.name),
-                                    subtitle: Text(exercise.unit.label),
-                                  );
-                                }).toList(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Add Exercise',
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Select a muscle group and one or more exercises to add to your workout. '
+                              'Exercises selected together are tracked as a superset.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 16),
+                            InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Muscle group',
                               ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: selectedGroupId,
+                                  isExpanded: true,
+                                  items: groups
+                                      .map(
+                                        (group) => DropdownMenuItem<String>(
+                                          value: group.id,
+                                          child: Text(group.name),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    if (value == null ||
+                                        value == selectedGroupId) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      selectedGroupId = value;
+                                      // Clear exercise selection when changing muscle groups
+                                      selectedExerciseIds.clear();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            exercises.isEmpty
+                                ? const Text(
+                                    'No exercises available for this muscle group yet.',
+                                  )
+                                : Column(
+                                    children: exercises.map((exercise) {
+                                      final isSelected = selectedExerciseIds
+                                          .contains(exercise.id);
+                                      return CheckboxListTile(
+                                        value: isSelected,
+                                        onChanged: (checked) {
+                                          setState(() {
+                                            if (checked ?? false) {
+                                              selectedExerciseIds.add(
+                                                exercise.id,
+                                              );
+                                            } else {
+                                              selectedExerciseIds.remove(
+                                                exercise.id,
+                                              );
+                                            }
+                                          });
+                                        },
+                                        title: Text(exercise.name),
+                                        subtitle: Text(exercise.unit.label),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),

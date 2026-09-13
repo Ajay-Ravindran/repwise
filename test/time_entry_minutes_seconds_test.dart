@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:repwise/models/exercise.dart';
-import 'package:repwise/models/muscle_group.dart';
 import 'package:repwise/providers/repwise_provider.dart';
 import 'package:repwise/screens/workout_screen.dart';
 import 'package:repwise/utils/repwise_storage.dart';
