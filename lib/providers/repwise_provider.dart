@@ -284,6 +284,39 @@ class RepwiseProvider extends ChangeNotifier {
         .toList();
   }
 
+  /// Logs [weight] for [date] (defaults to today). If an entry already
+  /// exists for that day, it is overwritten so the latest value wins.
+  void logWeight(double weight, {DateTime? date}) {
+    final day = _dateOnly(date ?? DateTime.now());
+    final now = DateTime.now();
+    final existingIndex = _weightEntries.indexWhere(
+      (entry) => _dateOnly(entry.date) == day,
+    );
+    if (existingIndex >= 0) {
+      _weightEntries[existingIndex] = _weightEntries[existingIndex].copyWith(
+        weight: weight,
+        loggedAt: now,
+      );
+    } else {
+      _weightEntries.add(
+        WeightEntry(id: _uuid.v4(), date: day, weight: weight, loggedAt: now),
+      );
+    }
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  /// Removes the weight entry with the given [id], if present.
+  void deleteWeightEntry(String id) {
+    final lengthBefore = _weightEntries.length;
+    _weightEntries.removeWhere((entry) => entry.id == id);
+    if (_weightEntries.length == lengthBefore) {
+      return;
+    }
+    notifyListeners();
+    unawaited(_persist());
+  }
+
   void _resetTimerState() {
     _timer?.cancel();
     _timer = null;
@@ -347,40 +380,6 @@ class RepwiseProvider extends ChangeNotifier {
     notifyListeners();
     unawaited(_persist());
   }
-
-  /// Logs [weight] for [date] (defaults to today). If an entry already
-  /// exists for that day, it is overwritten so the latest value wins.
-  void logWeight(double weight, {DateTime? date}) {
-    final day = _dateOnly(date ?? DateTime.now());
-    final now = DateTime.now();
-    final existingIndex = _weightEntries.indexWhere(
-      (entry) => _dateOnly(entry.date) == day,
-    );
-    if (existingIndex >= 0) {
-      _weightEntries[existingIndex] = _weightEntries[existingIndex].copyWith(
-        weight: weight,
-        loggedAt: now,
-      );
-    } else {
-      _weightEntries.add(
-        WeightEntry(id: _uuid.v4(), date: day, weight: weight, loggedAt: now),
-      );
-    }
-    notifyListeners();
-    unawaited(_persist());
-  }
-
-  /// Removes the weight entry with the given [id], if present.
-  void deleteWeightEntry(String id) {
-    final lengthBefore = _weightEntries.length;
-    _weightEntries.removeWhere((entry) => entry.id == id);
-    if (_weightEntries.length == lengthBefore) {
-      return;
-    }
-    notifyListeners();
-    unawaited(_persist());
-  }
-
 
   void updateMuscleGroup(String id, String name) {
     final trimmed = name.trim();
