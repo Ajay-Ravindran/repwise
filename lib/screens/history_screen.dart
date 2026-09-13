@@ -1375,7 +1375,8 @@ class _DraftSetEntry {
   String reps = '';
   String weight = '';
   String distance = '';
-  String time = '';
+  String minutes = '';
+  String seconds = '';
   String halfReps = '';
   String comment = '';
 }
@@ -1432,7 +1433,9 @@ void showHistorySetEditDialog(
       draft.distance = _formatNumberToString(entry.distance!);
     }
     if (entry.duration != null) {
-      draft.time = entry.duration!.inSeconds.toString();
+      final totalSeconds = entry.duration!.inSeconds;
+      draft.minutes = (totalSeconds ~/ 60).toString();
+      draft.seconds = (totalSeconds % 60).toString();
     }
     if (entry.halfReps != null && entry.halfReps! > 0) {
       draft.halfReps = entry.halfReps!.toString();
@@ -1644,7 +1647,10 @@ void showHistorySetEditDialog(
                               final distance = _parseDoubleOrNull(
                                 draft.distance,
                               );
-                              final duration = _parseDurationOrNull(draft.time);
+                              final duration = _combineMinutesSeconds(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               final halfReps = _parseIntOrNull(draft.halfReps);
                               final trimmedComment = draft.comment.trim();
 
@@ -1913,7 +1919,9 @@ void showAddSetToHistorySheet(
         draft.distance = _formatNumberToString(entry.distance!);
       }
       if (entry.duration != null) {
-        draft.time = entry.duration!.inSeconds.toString();
+        final totalSeconds = entry.duration!.inSeconds;
+        draft.minutes = (totalSeconds ~/ 60).toString();
+        draft.seconds = (totalSeconds % 60).toString();
       }
       if (entry.halfReps != null && entry.halfReps! > 0) {
         draft.halfReps = entry.halfReps!.toString();
@@ -2032,7 +2040,8 @@ void showAddSetToHistorySheet(
                                         draft.reps = '';
                                         draft.weight = '';
                                         draft.distance = '';
-                                        draft.time = '';
+                                        draft.minutes = '';
+                                        draft.seconds = '';
                                         draft.halfReps = '';
                                         draft.comment = '';
                                         validationError = null;
@@ -2153,7 +2162,10 @@ void showAddSetToHistorySheet(
                               final distance = _parseDoubleOrNull(
                                 draft.distance,
                               );
-                              final duration = _parseDurationOrNull(draft.time);
+                              final duration = _combineMinutesSeconds(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               final halfReps = _parseIntOrNull(draft.halfReps);
                               final trimmedComment = draft.comment.trim();
 
@@ -2260,12 +2272,29 @@ double? _parseDoubleOrNull(String value) {
   return double.tryParse(value.trim());
 }
 
-Duration? _parseDurationOrNull(String value) {
-  final trimmed = value.trim();
-  if (trimmed.isEmpty) return null;
-  final seconds = int.tryParse(trimmed);
-  if (seconds == null || seconds <= 0) return null;
-  return Duration(seconds: seconds);
+Duration? _combineMinutesSeconds(String minutesInput, String secondsInput) {
+  int parseNonNegativeInt(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return 0;
+    }
+    final parsed = int.tryParse(trimmed);
+    if (parsed == null || parsed < 0) {
+      return -1;
+    }
+    return parsed;
+  }
+
+  final minutesValue = parseNonNegativeInt(minutesInput);
+  final secondsValue = parseNonNegativeInt(secondsInput);
+  if (minutesValue < 0 || secondsValue < 0) {
+    return null;
+  }
+  final totalSeconds = minutesValue * 60 + secondsValue;
+  if (totalSeconds <= 0) {
+    return null;
+  }
+  return Duration(seconds: totalSeconds);
 }
 
 // Function to build exercise input fields (matching workout screen style)
@@ -2360,6 +2389,60 @@ List<Widget> _buildExerciseInputs(
     );
   }
 
+  Widget buildTimeRow() {
+    Widget timeField({
+      required String label,
+      required String fieldKey,
+      required String initialValue,
+      required void Function(String) onChanged,
+    }) {
+      return TextFormField(
+        key: ValueKey('${draft.id}-$fieldKey-${exercise.id}'),
+        initialValue: initialValue,
+        keyboardType: const TextInputType.numberWithOptions(decimal: false),
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+        onChanged: (value) {
+          setState(() {
+            onChanged(value);
+          });
+        },
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: timeField(
+              label: 'Minutes',
+              fieldKey: 'minutes',
+              initialValue: draft.minutes,
+              onChanged: (value) => draft.minutes = value,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: timeField(
+              label: 'Seconds',
+              fieldKey: 'seconds',
+              initialValue: draft.seconds,
+              onChanged: (value) => draft.seconds = value,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget buildRepsRow() {
     final repsField = buildField(
       label: 'Reps',
@@ -2401,15 +2484,7 @@ List<Widget> _buildExerciseInputs(
       fields.add(buildRepsRow());
       break;
     case ExerciseUnit.time:
-      fields.add(
-        buildField(
-          label: 'Time (seconds)',
-          fieldKey: 'time',
-          initialValue: draft.time,
-          keyboardType: const TextInputType.numberWithOptions(decimal: false),
-          onChanged: (value) => draft.time = value,
-        ),
-      );
+      fields.add(buildTimeRow());
       break;
     case ExerciseUnit.distanceTime:
       fields
@@ -2421,28 +2496,12 @@ List<Widget> _buildExerciseInputs(
             onChanged: (value) => draft.distance = value,
           ),
         )
-        ..add(
-          buildField(
-            label: 'Time (seconds)',
-            fieldKey: 'time',
-            initialValue: draft.time,
-            keyboardType: const TextInputType.numberWithOptions(decimal: false),
-            onChanged: (value) => draft.time = value,
-          ),
-        );
+        ..add(buildTimeRow());
       break;
     case ExerciseUnit.repsTime:
       fields
         ..add(buildRepsRow())
-        ..add(
-          buildField(
-            label: 'Time (seconds)',
-            fieldKey: 'time',
-            initialValue: draft.time,
-            keyboardType: const TextInputType.numberWithOptions(decimal: false),
-            onChanged: (value) => draft.time = value,
-          ),
-        );
+        ..add(buildTimeRow());
       break;
     case ExerciseUnit.distance:
       fields.add(
@@ -2464,15 +2523,7 @@ List<Widget> _buildExerciseInputs(
             onChanged: (value) => draft.weight = value,
           ),
         )
-        ..add(
-          buildField(
-            label: 'Time (seconds)',
-            fieldKey: 'time',
-            initialValue: draft.time,
-            keyboardType: const TextInputType.numberWithOptions(decimal: false),
-            onChanged: (value) => draft.time = value,
-          ),
-        );
+        ..add(buildTimeRow());
       break;
   }
 
