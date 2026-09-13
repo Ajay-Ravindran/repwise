@@ -993,6 +993,56 @@ class RepwiseProvider extends ChangeNotifier {
     return true;
   }
 
+  /// Adds a new set to an exercise log in a completed session.
+  /// Returns false if the session, exercise, or entries are invalid.
+  bool addSetToCompletedSession({
+    required String sessionId,
+    required String exerciseLogId,
+    required List<WorkoutSetEntry> entries,
+  }) {
+    final sessionIndex = _completedSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (sessionIndex == -1) {
+      return false;
+    }
+    final session = _completedSessions[sessionIndex];
+    final exercise = _exerciseById(session, exerciseLogId);
+    if (exercise == null) {
+      return false;
+    }
+    final group = muscleGroupById(exercise.muscleGroupId);
+    if (group == null) {
+      return false;
+    }
+    final allowedIds = group.exercises.map((ex) => ex.id).toSet();
+    final validEntries = entries
+        .where(
+          (entry) => entry.hasMetrics && allowedIds.contains(entry.exerciseId),
+        )
+        .toList(growable: false);
+    if (validEntries.isEmpty) {
+      return false;
+    }
+    final newIds = validEntries
+        .map((entry) => entry.exerciseId)
+        .where((id) => !exercise.exerciseIds.contains(id))
+        .toSet();
+    if (newIds.isNotEmpty) {
+      exercise.exerciseIds.addAll(newIds);
+    }
+    final set = WorkoutSet(
+      id: _uuid.v4(),
+      muscleGroupId: exercise.muscleGroupId,
+      entries: validEntries,
+      timestamp: DateTime.now(),
+    );
+    exercise.sets.add(set);
+    notifyListeners();
+    unawaited(_persist());
+    return true;
+  }
+
   Exercise? exerciseById(String id) {
     for (final group in _muscleGroups) {
       for (final exercise in group.exercises) {

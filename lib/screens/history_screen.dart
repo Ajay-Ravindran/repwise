@@ -60,9 +60,62 @@ class _HistoryScreenState extends State<HistoryScreen> {
           setState(() {
             _selectedMuscleGroupIds.add(muscleGroupId);
           });
+          _jumpToMostRecentMatchingDay();
         }
       }
     });
+  }
+
+  /// Jumps to the most recent workout day matching the current muscle group
+  /// filter (or any workout day if no filter is active). No-ops if no day found.
+  void _jumpToMostRecentMatchingDay() {
+    if (!mounted) {
+      return;
+    }
+    final provider = context.read<RepwiseProvider>();
+    final now = DateTime.now();
+    // Pass tomorrow so today is included in the search.
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    final day = provider.previousWorkoutDay(
+      tomorrow,
+      muscleGroupIds: _selectedMuscleGroupIds,
+    );
+    if (day != null) {
+      setState(() {
+        _selectedDay = day;
+        _focusedDay = day;
+      });
+    }
+  }
+
+  void _navigateToPrevDay() {
+    final provider = context.read<RepwiseProvider>();
+    final currentDay = _selectedDay ?? _focusedDay;
+    final day = provider.previousWorkoutDay(
+      currentDay,
+      muscleGroupIds: _selectedMuscleGroupIds,
+    );
+    if (day != null) {
+      setState(() {
+        _selectedDay = day;
+        _focusedDay = day;
+      });
+    }
+  }
+
+  void _navigateToNextDay() {
+    final provider = context.read<RepwiseProvider>();
+    final currentDay = _selectedDay ?? _focusedDay;
+    final day = provider.nextWorkoutDay(
+      currentDay,
+      muscleGroupIds: _selectedMuscleGroupIds,
+    );
+    if (day != null) {
+      setState(() {
+        _selectedDay = day;
+        _focusedDay = day;
+      });
+    }
   }
 
   Future<void> _exportLogs(BuildContext context) async {
@@ -212,16 +265,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     provider.setAutoFilterHistoryEnabled(
                                       enabled,
                                     );
-                                    // Update the menu state
                                     setMenuState(() {});
-                                    // Apply or clear filter based on new state
                                     if (!enabled) {
-                                      // Clear filter when disabled
                                       setState(() {
                                         _selectedMuscleGroupIds.clear();
                                       });
                                     } else {
-                                      // Apply filter when enabled
                                       final muscleGroupId =
                                           provider.activeWorkoutMuscleGroupId;
                                       if (muscleGroupId != null) {
@@ -231,6 +280,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             muscleGroupId,
                                           );
                                         });
+                                        _jumpToMostRecentMatchingDay();
                                       }
                                     }
                                   },
@@ -290,8 +340,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
               rowHeight: 44,
               headerStyle: const HeaderStyle(
                 formatButtonVisible: false,
-                titleCentered: true,
-                headerPadding: EdgeInsets.symmetric(vertical: 8),
+                titleCentered: false,
+                leftChevronVisible: false,
+                rightChevronVisible: false,
+                headerPadding: EdgeInsets.symmetric(vertical: 4),
               ),
               calendarStyle: const CalendarStyle(
                 cellPadding: EdgeInsets.all(4),
@@ -317,6 +369,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
               },
               onPageChanged: (focused) => _focusedDay = focused,
               calendarBuilders: CalendarBuilders(
+                headerTitleBuilder: (ctx, focusedDay) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        tooltip: 'Previous workout',
+                        onPressed: _navigateToPrevDay,
+                      ),
+                      Text(
+                        _SelectedDaySummary._monthYearLabel(focusedDay),
+                        style: Theme.of(ctx).textTheme.titleMedium,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        tooltip: 'Next workout',
+                        onPressed: _navigateToNextDay,
+                      ),
+                    ],
+                  );
+                },
                 markerBuilder: (context, day, events) {
                   if (events.isEmpty) {
                     return const SizedBox.shrink();
@@ -387,6 +460,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           _selectedMuscleGroupIds.remove(group.id);
                         }
                       });
+                      if (selected) {
+                        _jumpToMostRecentMatchingDay();
+                      }
                     },
                   ),
                 );
@@ -472,8 +548,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
         .map((id) => provider.muscleGroupById(id))
         .whereType<MuscleGroup>()
         .toList();
-    groups.sort((a, b) => a.name.compareTo(b.name));
-    return groups;
+
+    final selected =
+        groups.where((g) => _selectedMuscleGroupIds.contains(g.id)).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    final unselected =
+        groups.where((g) => !_selectedMuscleGroupIds.contains(g.id)).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    return [...selected, ...unselected];
   }
 
   Set<String> _muscleGroupsForEvents(
@@ -578,6 +660,10 @@ class _SelectedDaySummary extends StatelessWidget {
     final month = _monthName(day.month);
     final weekday = _weekdayName(day.weekday);
     return '$weekday, $month ${day.day}, ${day.year}';
+  }
+
+  static String _monthYearLabel(DateTime day) {
+    return '${_monthName(day.month)} ${day.year}';
   }
 
   static String _monthName(int month) {
@@ -750,6 +836,11 @@ class _SessionCard extends StatelessWidget {
           provider: provider,
           sessionId: session.id,
           showMuscleGroup: false,
+          onTap: () => showHistoryExerciseDetailSheet(
+            context,
+            exerciseLog: log,
+            sessionId: session.id,
+          ),
         ),
       );
 
@@ -768,41 +859,55 @@ class _ExerciseHistorySection extends StatelessWidget {
     required this.provider,
     required this.sessionId,
     this.showMuscleGroup = true,
+    this.onTap,
   });
 
   final WorkoutExerciseLog log;
   final RepwiseProvider provider;
   final String sessionId;
   final bool showMuscleGroup;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final exerciseNames = _exerciseNames();
+    final exerciseNames = _exerciseNamesForLog(log, provider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!log.isSuperset) ...[
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    ...exerciseNames.map((name) => Chip(label: Text(name))),
-                  ],
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ...exerciseNames.map((name) => Chip(label: Text(name))),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 8),
         ],
         if (log.isSuperset) ...[
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Chip(label: Text('Superset')),
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Chip(label: Text('Superset')),
+                ],
+              ),
+            ),
           ),
         ],
         if (log.sets.isEmpty)
@@ -822,20 +927,6 @@ class _ExerciseHistorySection extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  List<String> _exerciseNames() {
-    final ids = <String>{...log.exerciseIds};
-    for (final set in log.sets) {
-      for (final entry in set.entries) {
-        ids.add(entry.exerciseId);
-      }
-    }
-    final names = ids
-        .map((id) => provider.exerciseById(id)?.name ?? 'Exercise')
-        .toList(growable: false);
-    names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return names;
   }
 }
 
@@ -1595,6 +1686,547 @@ void showHistorySetEditDialog(
                             );
                           },
                           child: const Text('Update Set'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
+List<String> _exerciseNamesForLog(
+  WorkoutExerciseLog log,
+  RepwiseProvider provider,
+) {
+  final ids = <String>{...log.exerciseIds};
+  for (final set in log.sets) {
+    for (final entry in set.entries) {
+      ids.add(entry.exerciseId);
+    }
+  }
+  final names = ids
+      .map((id) => provider.exerciseById(id)?.name ?? 'Exercise')
+      .toList();
+  names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return names;
+}
+
+void showHistoryExerciseDetailSheet(
+  BuildContext context, {
+  required WorkoutExerciseLog exerciseLog,
+  required String sessionId,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheetContext) {
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.92,
+        builder: (ctx, scrollController) {
+          return Consumer<RepwiseProvider>(
+            builder: (ctx, provider, _) {
+              WorkoutSession? session;
+              WorkoutExerciseLog? log;
+              for (final s in provider.completedSessions) {
+                if (s.id == sessionId) {
+                  session = s;
+                  break;
+                }
+              }
+              if (session != null) {
+                for (final e in session.exercises) {
+                  if (e.id == exerciseLog.id) {
+                    log = e;
+                    break;
+                  }
+                }
+              }
+
+              if (log == null) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('This exercise is no longer available.'),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final resolvedLog = log!;
+              final group = provider.muscleGroupById(resolvedLog.muscleGroupId);
+              final exerciseNames = _exerciseNamesForLog(resolvedLog, provider);
+              final canAddSet = group != null && group.exercises.isNotEmpty;
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: Column(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12, bottom: 4),
+                      child: SizedBox(
+                        width: 40,
+                        height: 4,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFFBDBDBD),
+                            borderRadius: BorderRadius.all(Radius.circular(2)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                if (group != null)
+                                  Chip(label: Text(group.name)),
+                                if (resolvedLog.isSuperset)
+                                  const Chip(label: Text('Superset')),
+                                ...exerciseNames.map(
+                                  (name) => Chip(label: Text(name)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 16),
+                    Expanded(
+                      child: resolvedLog.sets.isEmpty
+                          ? const Center(
+                              child: Text('No sets logged for this exercise.'),
+                            )
+                          : ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              itemCount: resolvedLog.sets.length,
+                              itemBuilder: (listCtx, index) {
+                                return _WorkoutSetTile(
+                                  set: resolvedLog.sets[index],
+                                  setNumber: index + 1,
+                                  provider: provider,
+                                  sessionId: sessionId,
+                                  exerciseLogId: resolvedLog.id,
+                                );
+                              },
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      child: canAddSet
+                          ? FilledButton.icon(
+                              onPressed: () => showAddSetToHistorySheet(
+                                context,
+                                sessionId: sessionId,
+                                exerciseLog: resolvedLog,
+                              ),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Set'),
+                            )
+                          : const Text(
+                              'The muscle group for this exercise has been removed from the library. Sets cannot be added.',
+                              textAlign: TextAlign.center,
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+}
+
+void showAddSetToHistorySheet(
+  BuildContext context, {
+  required String sessionId,
+  required WorkoutExerciseLog exerciseLog,
+}) {
+  final rootContext = context;
+  final provider = rootContext.read<RepwiseProvider>();
+  final group = provider.muscleGroupById(exerciseLog.muscleGroupId);
+  if (group == null) {
+    ScaffoldMessenger.of(rootContext).showSnackBar(
+      const SnackBar(
+        content: Text('Muscle group for this exercise is missing'),
+      ),
+    );
+    return;
+  }
+
+  final Map<String, Exercise> exercisesById = <String, Exercise>{
+    for (final exercise in group.exercises) exercise.id: exercise,
+  };
+  for (final id in exerciseLog.exerciseIds) {
+    final cached = provider.exerciseById(id);
+    if (cached != null) {
+      exercisesById.putIfAbsent(id, () => cached);
+    }
+  }
+
+  var draftCounter = 0;
+  String nextDraftId() => 'draft_${draftCounter++}';
+  final List<_DraftSetEntry> drafts = <_DraftSetEntry>[];
+
+  if (exerciseLog.sets.isNotEmpty) {
+    final lastSet = exerciseLog.sets.last;
+    for (final entry in lastSet.entries) {
+      final draft = _DraftSetEntry(
+        id: nextDraftId(),
+        exerciseId: entry.exerciseId,
+      );
+      if (entry.reps != null) draft.reps = entry.reps!.toString();
+      if (entry.weight != null) {
+        draft.weight = _formatNumberToString(entry.weight!);
+      }
+      if (entry.distance != null) {
+        draft.distance = _formatNumberToString(entry.distance!);
+      }
+      if (entry.duration != null) {
+        draft.time = entry.duration!.inSeconds.toString();
+      }
+      if (entry.halfReps != null && entry.halfReps! > 0) {
+        draft.halfReps = entry.halfReps!.toString();
+      }
+      drafts.add(draft);
+    }
+  }
+
+  if (drafts.isEmpty) {
+    final defaultIds = exerciseLog.exerciseIds
+        .where((id) => exercisesById.containsKey(id))
+        .toList();
+    if (defaultIds.isEmpty && exercisesById.isNotEmpty) {
+      defaultIds.add(exercisesById.keys.first);
+    }
+    for (final id in defaultIds) {
+      drafts.add(_DraftSetEntry(id: nextDraftId(), exerciseId: id));
+    }
+    if (drafts.isEmpty) {
+      drafts.add(_DraftSetEntry(id: nextDraftId()));
+    }
+  }
+
+  String? validationError;
+
+  showModalBottomSheet<void>(
+    context: rootContext,
+    isScrollControlled: true,
+    builder: (sheetContext) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 24,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+        ),
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            Exercise? resolveExercise(String? exerciseId) {
+              if (exerciseId == null) return null;
+              return exercisesById[exerciseId] ??
+                  provider.exerciseById(exerciseId);
+            }
+
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Add Set',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(label: Text(group.name)),
+                      if (exerciseLog.isSuperset)
+                        const Chip(label: Text('Superset')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...drafts.asMap().entries.map((mapEntry) {
+                    final index = mapEntry.key;
+                    final draft = mapEntry.value;
+                    final exercise = resolveExercise(draft.exerciseId);
+                    final bool canRemove = drafts.length > 1;
+                    final bool isMissingExercise =
+                        draft.exerciseId != null && exercise == null;
+
+                    return Card(
+                      key: ValueKey(draft.id),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    initialValue: draft.exerciseId,
+                                    decoration: InputDecoration(
+                                      labelText: drafts.length > 1
+                                          ? 'Exercise ${index + 1}'
+                                          : 'Exercise',
+                                      border: const OutlineInputBorder(),
+                                      errorText: isMissingExercise
+                                          ? 'Exercise not found'
+                                          : null,
+                                    ),
+                                    items: exercisesById.entries
+                                        .map(
+                                          (e) => DropdownMenuItem<String>(
+                                            value: e.key,
+                                            child: Text(e.value.name),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (exerciseId) {
+                                      setState(() {
+                                        draft.exerciseId = exerciseId;
+                                        draft.reps = '';
+                                        draft.weight = '';
+                                        draft.distance = '';
+                                        draft.time = '';
+                                        draft.halfReps = '';
+                                        draft.comment = '';
+                                        validationError = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                if (canRemove) ...[
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        drafts.removeAt(index);
+                                      });
+                                    },
+                                    icon: const Icon(Icons.remove_circle),
+                                    tooltip: 'Remove exercise',
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (exercise != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      exercise.unit.label,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelLarge,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ..._buildExerciseInputs(
+                                      context,
+                                      exercise,
+                                      draft,
+                                      provider,
+                                      setState,
+                                      validationError,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        final newEntry = _DraftSetEntry(id: nextDraftId());
+                        if (drafts.isNotEmpty) {
+                          newEntry.exerciseId = drafts.last.exerciseId;
+                        } else if (exercisesById.isNotEmpty) {
+                          newEntry.exerciseId = exercisesById.keys.first;
+                        }
+                        drafts.add(newEntry);
+                      });
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add another exercise entry'),
+                  ),
+                  if (validationError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        validationError!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.check),
+                          label: const Text('Add Set'),
+                          onPressed: () {
+                            void showError(String message) {
+                              setState(() {
+                                validationError = message;
+                              });
+                            }
+
+                            if (drafts.isEmpty) {
+                              showError('Add at least one exercise entry.');
+                              return;
+                            }
+
+                            final entries = <WorkoutSetEntry>[];
+                            for (final draft in drafts) {
+                              final exerciseId = draft.exerciseId;
+                              if (exerciseId == null) {
+                                showError('Select an exercise for each entry.');
+                                return;
+                              }
+                              final exercise = resolveExercise(exerciseId);
+                              if (exercise == null) {
+                                showError('Selected exercise is unavailable.');
+                                return;
+                              }
+
+                              final reps = _parseIntOrNull(draft.reps);
+                              final weight = _parseDoubleOrNull(draft.weight);
+                              final distance = _parseDoubleOrNull(
+                                draft.distance,
+                              );
+                              final duration = _parseDurationOrNull(draft.time);
+                              final halfReps = _parseIntOrNull(draft.halfReps);
+                              final trimmedComment = draft.comment.trim();
+
+                              bool hasData;
+                              switch (exercise.unit) {
+                                case ExerciseUnit.weightReps:
+                                  hasData = weight != null && reps != null;
+                                  break;
+                                case ExerciseUnit.reps:
+                                  hasData = reps != null;
+                                  break;
+                                case ExerciseUnit.time:
+                                  hasData = duration != null;
+                                  break;
+                                case ExerciseUnit.distanceTime:
+                                  hasData =
+                                      distance != null && duration != null;
+                                  break;
+                                case ExerciseUnit.repsTime:
+                                  hasData = reps != null && duration != null;
+                                  break;
+                                case ExerciseUnit.distance:
+                                  hasData = distance != null;
+                                  break;
+                                case ExerciseUnit.weightTime:
+                                  hasData = weight != null && duration != null;
+                                  break;
+                              }
+
+                              if (!hasData) {
+                                showError(
+                                  'Fill in all required fields for ${exercise.name}.',
+                                );
+                                return;
+                              }
+
+                              entries.add(
+                                WorkoutSetEntry(
+                                  exerciseId: exerciseId,
+                                  unit: exercise.unit,
+                                  reps: reps,
+                                  weight: weight,
+                                  distance: distance,
+                                  duration: duration,
+                                  halfReps: (halfReps != null && halfReps > 0)
+                                      ? halfReps
+                                      : null,
+                                  comment: trimmedComment.isEmpty
+                                      ? null
+                                      : trimmedComment,
+                                ),
+                              );
+                            }
+
+                            final success = provider.addSetToCompletedSession(
+                              sessionId: sessionId,
+                              exerciseLogId: exerciseLog.id,
+                              entries: entries,
+                            );
+
+                            if (!success) {
+                              showError('Unable to add this set.');
+                              return;
+                            }
+
+                            Navigator.of(sheetContext).pop();
+                            ScaffoldMessenger.of(rootContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Set added'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],

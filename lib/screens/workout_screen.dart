@@ -1618,12 +1618,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 ),
         ),
         const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: hasLoggedSets
-              ? () => _handleFinishWorkout(context, provider)
-              : null,
-          child: const Text('Finish Workout'),
-        ),
+        if (hasLoggedSets)
+          OutlinedButton(
+            onPressed: () => _handleFinishWorkout(context, provider),
+            child: const Text('Finish Workout'),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: () => _handleCancelWorkout(context, provider),
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Cancel Workout'),
+          ),
       ],
     );
   }
@@ -1891,6 +1896,54 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Workout saved'),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 250,
+          left: 16,
+          right: 16,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleCancelWorkout(
+    BuildContext context,
+    RepwiseProvider provider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cancel Workout?'),
+          content: const Text(
+            'This workout has no sets logged and will be discarded.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Back'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              child: const Text('Discard'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    provider.finishWorkout();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Workout cancelled'),
         behavior: SnackBarBehavior.floating,
         margin: EdgeInsets.only(
           bottom: MediaQuery.of(context).size.height - 250,

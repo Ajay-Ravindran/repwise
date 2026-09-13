@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:repwise/models/exercise.dart';
+import 'package:repwise/models/workout.dart';
 import 'package:repwise/providers/repwise_provider.dart';
 import 'package:repwise/utils/repwise_storage.dart';
 
@@ -213,6 +215,113 @@ void main() {
         ),
         isNull,
       );
+    });
+  });
+
+  group('addSetToCompletedSession', () {
+    test('adds a set and returns true', () async {
+      final p = await _buildProvider(chestDates: ['2026-06-01']);
+      final session = p.completedSessions.first;
+      final exerciseLog = session.exercises.first;
+      final initialSetCount = exerciseLog.sets.length;
+
+      final success = p.addSetToCompletedSession(
+        sessionId: session.id,
+        exerciseLogId: exerciseLog.id,
+        entries: [
+          WorkoutSetEntry(
+            exerciseId: _exerciseId,
+            unit: ExerciseUnit.reps,
+            reps: 12,
+          ),
+        ],
+      );
+
+      expect(success, isTrue);
+      final updatedLog = p.completedSessions.first.exercises.first;
+      expect(updatedLog.sets.length, equals(initialSetCount + 1));
+    });
+
+    test('returns false for unknown session', () async {
+      final p = await _buildProvider(chestDates: ['2026-06-01']);
+      final session = p.completedSessions.first;
+      final exerciseLog = session.exercises.first;
+
+      final success = p.addSetToCompletedSession(
+        sessionId: 'nonexistent-session',
+        exerciseLogId: exerciseLog.id,
+        entries: [
+          WorkoutSetEntry(
+            exerciseId: _exerciseId,
+            unit: ExerciseUnit.reps,
+            reps: 12,
+          ),
+        ],
+      );
+
+      expect(success, isFalse);
+    });
+
+    test('returns false for unknown exercise log', () async {
+      final p = await _buildProvider(chestDates: ['2026-06-01']);
+      final session = p.completedSessions.first;
+
+      final success = p.addSetToCompletedSession(
+        sessionId: session.id,
+        exerciseLogId: 'nonexistent-log',
+        entries: [
+          WorkoutSetEntry(
+            exerciseId: _exerciseId,
+            unit: ExerciseUnit.reps,
+            reps: 12,
+          ),
+        ],
+      );
+
+      expect(success, isFalse);
+    });
+
+    test('returns false when entries have no metrics', () async {
+      final p = await _buildProvider(chestDates: ['2026-06-01']);
+      final session = p.completedSessions.first;
+      final exerciseLog = session.exercises.first;
+
+      final success = p.addSetToCompletedSession(
+        sessionId: session.id,
+        exerciseLogId: exerciseLog.id,
+        entries: [
+          WorkoutSetEntry(
+            exerciseId: _exerciseId,
+            unit: ExerciseUnit.reps,
+            reps: null,
+          ),
+        ],
+      );
+
+      expect(success, isFalse);
+    });
+
+    test('returns false when entry exercise is from wrong muscle group', () async {
+      final p = await _buildProvider(
+        chestDates: ['2026-06-01'],
+        backDates: [],
+      );
+      final session = p.completedSessions.first;
+      final exerciseLog = session.exercises.first; // chest log
+
+      final success = p.addSetToCompletedSession(
+        sessionId: session.id,
+        exerciseLogId: exerciseLog.id,
+        entries: [
+          WorkoutSetEntry(
+            exerciseId: _altExerciseId, // back exercise — not allowed on chest log
+            unit: ExerciseUnit.reps,
+            reps: 10,
+          ),
+        ],
+      );
+
+      expect(success, isFalse);
     });
   });
 }
