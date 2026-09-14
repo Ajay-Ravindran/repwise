@@ -13,6 +13,7 @@ import '../models/workout.dart';
 import '../providers/repwise_provider.dart';
 import '../utils/workout_entry_formatter.dart';
 import '../widgets/scrollable_metrics_text.dart';
+import 'weight_tracking_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -108,93 +109,119 @@ class WorkoutScreen extends StatefulWidget {
             top: 24,
             bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
           ),
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              final group = groups.firstWhere(
-                (candidate) => candidate.id == selectedGroupId,
-              );
-              final exercises = group.exercises;
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
+            ),
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                final group = groups.firstWhere(
+                  (candidate) => candidate.id == selectedGroupId,
+                );
+                final exercises = group.exercises;
 
-              return SingleChildScrollView(
-                child: Column(
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Add Exercise',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Select a muscle group and one or more exercises to add to your workout. '
-                      'Exercises selected together are tracked as a superset.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Muscle group',
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedGroupId,
-                          isExpanded: true,
-                          items: groups
-                              .map(
-                                (group) => DropdownMenuItem<String>(
-                                  value: group.id,
-                                  child: Text(group.name),
+                    // Everything above the pinned button (header, description,
+                    // dropdown and the exercise checklist) shares a single
+                    // scroll region. This ensures that even if the fixed
+                    // "chrome" grows very tall (e.g. large accessibility text
+                    // scale on a short screen) it can shrink/scroll instead of
+                    // overflowing, while the Add Exercise button below always
+                    // stays pinned and visible without needing to scroll.
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Add Exercise',
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge,
+                                  ),
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null || value == selectedGroupId) {
-                              return;
-                            }
-                            setState(() {
-                              selectedGroupId = value;
-                              // Clear exercise selection when changing muscle groups
-                              selectedExerciseIds.clear();
-                            });
-                          },
+                                IconButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Select a muscle group and one or more exercises to add to your workout. '
+                              'Exercises selected together are tracked as a superset.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 16),
+                            InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Muscle group',
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: selectedGroupId,
+                                  isExpanded: true,
+                                  items: groups
+                                      .map(
+                                        (group) => DropdownMenuItem<String>(
+                                          value: group.id,
+                                          child: Text(group.name),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    if (value == null ||
+                                        value == selectedGroupId) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      selectedGroupId = value;
+                                      // Clear exercise selection when changing muscle groups
+                                      selectedExerciseIds.clear();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            exercises.isEmpty
+                                ? const Text(
+                                    'No exercises available for this muscle group yet.',
+                                  )
+                                : Column(
+                                    children: exercises.map((exercise) {
+                                      final isSelected = selectedExerciseIds
+                                          .contains(exercise.id);
+                                      return CheckboxListTile(
+                                        value: isSelected,
+                                        onChanged: (checked) {
+                                          setState(() {
+                                            if (checked ?? false) {
+                                              selectedExerciseIds.add(
+                                                exercise.id,
+                                              );
+                                            } else {
+                                              selectedExerciseIds.remove(
+                                                exercise.id,
+                                              );
+                                            }
+                                          });
+                                        },
+                                        title: Text(exercise.name),
+                                        subtitle: Text(exercise.unit.label),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    if (exercises.isEmpty)
-                      const Text(
-                        'No exercises available for this muscle group yet.',
-                      )
-                    else
-                      Column(
-                        children: exercises.map((exercise) {
-                          final isSelected = selectedExerciseIds.contains(
-                            exercise.id,
-                          );
-                          return CheckboxListTile(
-                            value: isSelected,
-                            onChanged: (checked) {
-                              setState(() {
-                                if (checked ?? false) {
-                                  selectedExerciseIds.add(exercise.id);
-                                } else {
-                                  selectedExerciseIds.remove(exercise.id);
-                                }
-                              });
-                            },
-                            title: Text(exercise.name),
-                            subtitle: Text(exercise.unit.label),
-                          );
-                        }).toList(),
-                      ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
                       onPressed: selectedExerciseIds.isEmpty
@@ -247,9 +274,9 @@ class WorkoutScreen extends StatefulWidget {
                       label: const Text('Add Exercise'),
                     ),
                   ],
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
@@ -402,7 +429,9 @@ class WorkoutScreen extends StatefulWidget {
           draft.distance = _formatNumberToString(entry.distance!);
         }
         if (entry.duration != null) {
-          draft.time = entry.duration!.inSeconds.toString();
+          final totalSeconds = entry.duration!.inSeconds;
+          draft.minutes = (totalSeconds ~/ 60).toString();
+          draft.seconds = (totalSeconds % 60).toString();
         }
         if (entry.halfReps != null) {
           draft.halfReps = entry.halfReps!.toString();
@@ -548,6 +577,63 @@ class WorkoutScreen extends StatefulWidget {
                   );
                 }
 
+                Widget buildTimeRow() {
+                  Widget timeField({
+                    required String label,
+                    required String fieldKey,
+                    required String initialValue,
+                    required void Function(String) onChanged,
+                  }) {
+                    return TextFormField(
+                      key: ValueKey('${draft.id}-$fieldKey-${exercise.id}'),
+                      initialValue: initialValue,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: false,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: label,
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          onChanged(value);
+                          validationError = null;
+                        });
+                      },
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: timeField(
+                            label: 'Minutes',
+                            fieldKey: 'minutes',
+                            initialValue: draft.minutes,
+                            onChanged: (value) => draft.minutes = value,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: timeField(
+                            label: 'Seconds',
+                            fieldKey: 'seconds',
+                            initialValue: draft.seconds,
+                            onChanged: (value) => draft.seconds = value,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 Widget buildRepsRow() {
                   final repsField = buildField(
                     label: 'Reps',
@@ -591,17 +677,7 @@ class WorkoutScreen extends StatefulWidget {
                     fields.add(buildRepsRow());
                     break;
                   case ExerciseUnit.time:
-                    fields.add(
-                      buildField(
-                        label: 'Time (seconds)',
-                        fieldKey: 'time',
-                        initialValue: draft.time,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: false,
-                        ),
-                        onChanged: (value) => draft.time = value,
-                      ),
-                    );
+                    fields.add(buildTimeRow());
                     break;
                   case ExerciseUnit.distanceTime:
                     fields
@@ -613,32 +689,12 @@ class WorkoutScreen extends StatefulWidget {
                           onChanged: (value) => draft.distance = value,
                         ),
                       )
-                      ..add(
-                        buildField(
-                          label: 'Time (seconds)',
-                          fieldKey: 'time',
-                          initialValue: draft.time,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: false,
-                          ),
-                          onChanged: (value) => draft.time = value,
-                        ),
-                      );
+                      ..add(buildTimeRow());
                     break;
                   case ExerciseUnit.repsTime:
                     fields
                       ..add(buildRepsRow())
-                      ..add(
-                        buildField(
-                          label: 'Time (seconds)',
-                          fieldKey: 'time',
-                          initialValue: draft.time,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: false,
-                          ),
-                          onChanged: (value) => draft.time = value,
-                        ),
-                      );
+                      ..add(buildTimeRow());
                     break;
                   case ExerciseUnit.distance:
                     fields.add(
@@ -660,17 +716,7 @@ class WorkoutScreen extends StatefulWidget {
                           onChanged: (value) => draft.weight = value,
                         ),
                       )
-                      ..add(
-                        buildField(
-                          label: 'Time (seconds)',
-                          fieldKey: 'time',
-                          initialValue: draft.time,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: false,
-                          ),
-                          onChanged: (value) => draft.time = value,
-                        ),
-                      );
+                      ..add(buildTimeRow());
                     break;
                 }
 
@@ -787,7 +833,8 @@ class WorkoutScreen extends StatefulWidget {
                                         draft.reps = '';
                                         draft.weight = '';
                                         draft.distance = '';
-                                        draft.time = '';
+                                        draft.minutes = '';
+                                        draft.seconds = '';
                                         draft.halfReps = '';
                                         draft.comment = '';
                                         validationError = null;
@@ -893,12 +940,36 @@ class WorkoutScreen extends StatefulWidget {
                           return parsed;
                         }
 
-                        Duration? parsePositiveDuration(String value) {
-                          final seconds = parsePositiveInt(value);
-                          if (seconds == null) {
+                        Duration? parsePositiveDuration(
+                          String minutesInput,
+                          String secondsInput,
+                        ) {
+                          int parseNonNegativeInt(String value) {
+                            final trimmed = value.trim();
+                            if (trimmed.isEmpty) {
+                              return 0;
+                            }
+                            final parsed = int.tryParse(trimmed);
+                            if (parsed == null || parsed < 0) {
+                              return -1;
+                            }
+                            return parsed;
+                          }
+
+                          final minutesValue = parseNonNegativeInt(
+                            minutesInput,
+                          );
+                          final secondsValue = parseNonNegativeInt(
+                            secondsInput,
+                          );
+                          if (minutesValue < 0 || secondsValue < 0) {
                             return null;
                           }
-                          return Duration(seconds: seconds);
+                          final totalSeconds = minutesValue * 60 + secondsValue;
+                          if (totalSeconds <= 0) {
+                            return null;
+                          }
+                          return Duration(seconds: totalSeconds);
                         }
 
                         if (drafts.isEmpty) {
@@ -971,7 +1042,10 @@ class WorkoutScreen extends StatefulWidget {
                               }
                               break;
                             case ExerciseUnit.time:
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (duration == null) {
                                 showError('Enter time for ${exercise.name}.');
                                 return;
@@ -979,7 +1053,10 @@ class WorkoutScreen extends StatefulWidget {
                               break;
                             case ExerciseUnit.distanceTime:
                               distance = parsePositiveDouble(draft.distance);
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (distance == null || duration == null) {
                                 showError(
                                   'Enter distance and time for ${exercise.name}.',
@@ -989,7 +1066,10 @@ class WorkoutScreen extends StatefulWidget {
                               break;
                             case ExerciseUnit.repsTime:
                               reps = parsePositiveInt(draft.reps);
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (reps == null || duration == null) {
                                 showError(
                                   'Enter reps and time for ${exercise.name}.',
@@ -1008,7 +1088,10 @@ class WorkoutScreen extends StatefulWidget {
                               break;
                             case ExerciseUnit.weightTime:
                               weight = parsePositiveDouble(draft.weight);
-                              duration = parsePositiveDuration(draft.time);
+                              duration = parsePositiveDuration(
+                                draft.minutes,
+                                draft.seconds,
+                              );
                               if (weight == null || duration == null) {
                                 showError(
                                   'Enter weight and time for ${exercise.name}.',
@@ -1104,7 +1187,8 @@ class _DraftSetEntry {
   String reps = '';
   String weight = '';
   String distance = '';
-  String time = '';
+  String minutes = '';
+  String seconds = '';
   String halfReps = '';
   String comment = '';
 }
@@ -1516,6 +1600,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           child: Text('Workout', style: Theme.of(context).textTheme.titleLarge),
         ),
         const SizedBox(width: 12),
+        IconButton(
+          tooltip: 'Track weight',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const WeightTrackingScreen(),
+            ),
+          ),
+          icon: const Icon(Icons.monitor_weight_outlined),
+        ),
         if (provider.isTimerActive)
           InkWell(
             onTap: () => _showTimerPopup(context),

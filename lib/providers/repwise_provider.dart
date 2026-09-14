@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/exercise.dart';
 import '../models/muscle_group.dart';
+import '../models/weight_entry.dart';
 import '../models/workout.dart';
 import '../utils/repwise_storage.dart';
 
@@ -18,6 +19,7 @@ class RepwiseProvider extends ChangeNotifier {
   final Uuid _uuid = const Uuid();
   final List<MuscleGroup> _muscleGroups = <MuscleGroup>[];
   final List<WorkoutSession> _completedSessions = <WorkoutSession>[];
+  final List<WeightEntry> _weightEntries = <WeightEntry>[];
   WorkoutSession? _activeSession;
   Timer? _timer;
   Duration? _timerTotalDuration;
@@ -59,6 +61,11 @@ class RepwiseProvider extends ChangeNotifier {
 
   List<WorkoutSession> get completedSessions =>
       List<WorkoutSession>.unmodifiable(_completedSessions);
+  List<WeightEntry> get weightEntries {
+    final sorted = List<WeightEntry>.from(_weightEntries)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    return List<WeightEntry>.unmodifiable(sorted);
+  }
   Duration? get timerTotalDuration => _timerTotalDuration;
   Duration? get timerRemaining => _timerRemaining;
   Duration? get timerElapsed =>
@@ -217,6 +224,10 @@ class RepwiseProvider extends ChangeNotifier {
       ..clear()
       ..addAll(_decodeSessions(map['completedSessions']));
 
+    _weightEntries
+      ..clear()
+      ..addAll(_decodeWeightEntries(map['weightEntries']));
+
     final active = map['activeSession'];
     if (active is Map<String, dynamic>) {
       _activeSession = WorkoutSession.fromJson(active);
@@ -263,6 +274,49 @@ class RepwiseProvider extends ChangeNotifier {
     return sessions;
   }
 
+  List<WeightEntry> _decodeWeightEntries(dynamic value) {
+    if (value is! List) {
+      return <WeightEntry>[];
+    }
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map(WeightEntry.fromJson)
+        .toList();
+  }
+
+  /// Logs [weight] for [date] (defaults to today). If an entry already
+  /// exists for that day, it is overwritten so the latest value wins.
+  void logWeight(double weight, {DateTime? date}) {
+    final day = _dateOnly(date ?? DateTime.now());
+    final now = DateTime.now();
+    final existingIndex = _weightEntries.indexWhere(
+      (entry) => _dateOnly(entry.date) == day,
+    );
+    if (existingIndex >= 0) {
+      _weightEntries[existingIndex] = _weightEntries[existingIndex].copyWith(
+        weight: weight,
+        loggedAt: now,
+      );
+    } else {
+      _weightEntries.add(
+        WeightEntry(id: _uuid.v4(), date: day, weight: weight, loggedAt: now),
+      );
+    }
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  /// Removes the weight entry with the given [id], if present.
+  void deleteWeightEntry(String id) {
+    final lengthBefore = _weightEntries.length;
+    _weightEntries.removeWhere((entry) => entry.id == id);
+    if (_weightEntries.length == lengthBefore) {
+      return;
+    }
+    notifyListeners();
+    unawaited(_persist());
+  }
+
   void _resetTimerState() {
     _timer?.cancel();
     _timer = null;
@@ -279,6 +333,7 @@ class RepwiseProvider extends ChangeNotifier {
       'completedSessions': _completedSessions
           .map((session) => session.toJson())
           .toList(),
+      'weightEntries': _weightEntries.map((entry) => entry.toJson()).toList(),
       'activeSession': _activeSession?.toJson(),
       'settings': <String, dynamic>{
         'timerSoundEnabled': _timerSoundEnabled,
